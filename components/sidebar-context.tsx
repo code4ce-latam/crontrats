@@ -26,6 +26,11 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (context === undefined) {
+    // Durante SSR o si el contexto no está disponible, retornar valores por defecto
+    // en lugar de lanzar un error, para evitar problemas de hidratación
+    if (typeof window === 'undefined') {
+      return { isOpen: true, toggle: () => {} };
+    }
     throw new Error("useSidebar must be used within a SidebarProvider");
   }
   return context;

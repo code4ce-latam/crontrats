@@ -98,25 +98,33 @@ export async function POST(request: NextRequest) {
         membershipId: updatedMembership?.id,
         newRole: updatedMembership?.role
       });
+    }
 
-      // Obtener información del usuario objetivo para la descripción
-      let targetUserEmail = userId;
-      let targetUserName = null;
+    // Obtener información del usuario objetivo UNA SOLA VEZ si se necesita (para rol o nombres)
+    // Esto evita llamadas duplicadas a getUserById
+    let targetUserInfo: any = null;
+    let targetUserEmail = userId;
+    let targetUserName = null;
+    
+    if ((role && role !== targetMembership.role) || firstName !== undefined || lastName !== undefined) {
       try {
-        const { data: targetUserInfo } = await supabaseAdmin.auth.admin.getUserById(userId);
-        if (targetUserInfo?.user) {
-          targetUserEmail = targetUserInfo.user.email || userId;
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (userData?.user) {
+          targetUserInfo = userData.user;
+          targetUserEmail = userData.user.email || userId;
           targetUserName = 
-            targetUserInfo.user.user_metadata?.full_name ||
-            targetUserInfo.user.user_metadata?.name ||
-            `${targetUserInfo.user.user_metadata?.first_name || ''} ${targetUserInfo.user.user_metadata?.last_name || ''}`.trim() ||
+            userData.user.user_metadata?.full_name ||
+            userData.user.user_metadata?.name ||
+            `${userData.user.user_metadata?.first_name || ''} ${userData.user.user_metadata?.last_name || ''}`.trim() ||
             null;
         }
       } catch (err) {
-        console.warn("[UpdateUser] No se pudo obtener información del usuario objetivo para la actividad:", err);
+        console.warn("[UpdateUser] No se pudo obtener información del usuario objetivo:", err);
       }
+    }
 
-      // Registrar actividad de actualización de rol
+    // Registrar actividad de actualización de rol (si se actualizó)
+    if (role && role !== targetMembership.role) {
       try {
         const roleLabels: Record<string, string> = {
           'OWNER': 'Propietario',
@@ -162,29 +170,22 @@ export async function POST(request: NextRequest) {
         updateData.full_name = `${firstName || ''} ${lastName || ''}`.trim();
       }
 
-      // Obtener información del usuario ANTES de actualizar para guardar valores anteriores
-      const { data: targetUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
-      
-      if (getUserError || !targetUser) {
-        console.error("[UpdateUser] Error obteniendo usuario:", getUserError);
+      // targetUserInfo ya debería estar disponible si se actualizó el rol
+      // Si no, significa que solo se actualizan nombres y no se obtuvo antes
+      if (!targetUserInfo) {
+        console.error("[UpdateUser] targetUserInfo no disponible para actualizar nombres");
         return NextResponse.json(
-          { error: "Error al obtener información del usuario" },
+          { error: "Error: información del usuario no disponible" },
           { status: 500 }
         );
       }
 
       // Guardar valores anteriores para la actividad
-      const previousFirstName = targetUser.user.user_metadata?.first_name || null;
-      const previousLastName = targetUser.user.user_metadata?.last_name || null;
-      const targetUserEmail = targetUser.user.email || userId;
-      const targetUserName = 
-        targetUser.user.user_metadata?.full_name ||
-        targetUser.user.user_metadata?.name ||
-        `${targetUser.user.user_metadata?.first_name || ''} ${targetUser.user.user_metadata?.last_name || ''}`.trim() ||
-        null;
+      const previousFirstName = targetUserInfo.user_metadata?.first_name || null;
+      const previousLastName = targetUserInfo.user_metadata?.last_name || null;
 
       // Actualizar user_metadata usando admin client
-      const currentMetadata = targetUser.user.user_metadata || {};
+      const currentMetadata = targetUserInfo.user_metadata || {};
       const newMetadata = {
         ...currentMetadata,
         ...updateData,

@@ -21,8 +21,8 @@
     },
     {
         "key": "folders",
-        "label": "Folders",
-        "path": "/folders",
+        "label": "Carpetas",
+        "path": "/protected/carpetas",
         "visibleRoles": [
             "OWNER",
             "EDITOR",

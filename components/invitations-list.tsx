@@ -138,50 +138,24 @@ export function InvitationsList({ initialData, invitedByNames: initialInvitedByN
     invite: null,
   });
 
-  // Obtener nombres de usuarios que invitaron
+  // Obtener nombres de usuarios que invitaron (solo si no se proporcionaron desde el servidor)
   useEffect(() => {
     async function fetchInvitedByNames() {
-      const supabase = createClient();
+      // Si ya tenemos todos los nombres del servidor, no hacer nada
       const userIds = [...new Set(initialData.invitations.map(inv => inv.invited_by_user_id))];
+      const currentNames = invitedByNames;
+      const missingNames = userIds.filter(userId => !currentNames[userId] || currentNames[userId].endsWith('...'));
       
-      if (userIds.length === 0) return;
+      if (missingNames.length === 0) return;
 
-      // Obtener el workspace_id del usuario actual
+      const supabase = createClient();
+      
+      // Obtener el usuario actual
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
 
-      const { data: membership } = await supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'ACTIVE')
-        .limit(1)
-        .maybeSingle();
-
-      if (!membership?.workspace_id) return;
-
-      // Obtener todos los miembros del workspace que son los que invitaron
-      const { data: workspaceMembers, error } = await supabase
-        .from('workspace_members')
-        .select('user_id')
-        .eq('workspace_id', membership.workspace_id)
-        .eq('status', 'ACTIVE')
-        .in('user_id', userIds);
-
-      if (error) {
-        console.error("[InvitationsList] Error obteniendo miembros del workspace:", error);
-        return;
-      }
-
-      const names: Record<string, string> = { ...invitedByNames };
-
-      // Para cada usuario que invitó, obtener su información
-      for (const userId of userIds) {
-        // Si ya tenemos el nombre y no es un placeholder, no hacer nada
-        if (names[userId] && !names[userId].endsWith('...')) {
-          continue;
-        }
-
+      // Obtener nombres en paralelo usando Promise.all
+      const namePromises = missingNames.map(async (userId) => {
         // Si es el usuario actual, usar su información directamente
         if (userId === currentUser.id) {
           const userName = 
@@ -190,41 +164,40 @@ export function InvitationsList({ initialData, invitedByNames: initialInvitedByN
             `${currentUser.user_metadata?.first_name || ''} ${currentUser.user_metadata?.last_name || ''}`.trim() ||
             currentUser.email?.split("@")[0] ||
             "Usuario";
-          names[userId] = userName;
-          continue;
+          return { userId, userName };
         }
 
-        // Verificar si el usuario está en el workspace
-        const isInWorkspace = workspaceMembers?.some(m => m.user_id === userId);
-        
-        if (isInWorkspace) {
-          // Intentar obtener el nombre usando la función RPC
-          try {
-            const { data: userName, error: rpcError } = await supabase.rpc('get_user_display_name', {
-              user_uuid: userId
-            });
+        // Intentar obtener el nombre usando la función RPC
+        try {
+          const { data: userName, error: rpcError } = await supabase.rpc('get_user_display_name', {
+            user_uuid: userId
+          });
 
-            if (!rpcError && userName) {
-              names[userId] = userName;
-            } else {
-              // Si la función RPC falla, usar placeholder
-              names[userId] = userId.substring(0, 8) + '...';
-            }
-          } catch (rpcError) {
-            // Si la función RPC no existe o hay error, usar placeholder
-            console.warn(`[InvitationsList] Error obteniendo nombre para usuario ${userId}:`, rpcError);
-            names[userId] = userId.substring(0, 8) + '...';
+          if (!rpcError && userName) {
+            return { userId, userName };
+          } else {
+            // Si la función RPC falla, usar placeholder
+            return { userId, userName: userId.substring(0, 8) + '...' };
           }
-        } else {
-          // Si no está en el workspace, usar placeholder
-          names[userId] = userId.substring(0, 8) + '...';
+        } catch (rpcError) {
+          // Si la función RPC no existe o hay error, usar placeholder
+          console.warn(`[InvitationsList] Error obteniendo nombre para usuario ${userId}:`, rpcError);
+          return { userId, userName: userId.substring(0, 8) + '...' };
         }
-      }
+      });
+
+      // Ejecutar todas las llamadas en paralelo
+      const results = await Promise.all(namePromises);
+      const names: Record<string, string> = { ...currentNames };
+      results.forEach(({ userId, userName }) => {
+        names[userId] = userName;
+      });
 
       setInvitedByNames(names);
     }
 
     fetchInvitedByNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData.invitations]);
 
   const handlePageChange = (newPage: number) => {

@@ -12,6 +12,8 @@ export async function Sidebar() {
   const settingsItem = menuItems.find((item) => item.key === "settings") || null;
   const mainItems = menuItems.filter((item) => item.key !== "settings");
 
+  // SidebarContent es un Client Component que usa useSidebar()
+  // El SidebarProvider está en el layout, así que el contexto estará disponible
   return <SidebarContent menuItems={mainItems} settingsItem={settingsItem} />;
 }
 

@@ -69,48 +69,70 @@ export async function getUserWorkspaceId(
 
 /**
  * Obtiene las invitaciones del workspace del usuario actual con paginación
+ * OPTIMIZADO: Acepta workspaceId opcional para evitar consultas duplicadas
+ * @param supabase - Cliente de Supabase
+ * @param page - Número de página (default: 1)
+ * @param pageSize - Tamaño de página (default: 20)
+ * @param workspaceId - (Opcional) ID del workspace. Si no se proporciona, se obtiene del usuario actual
  */
 export async function getWorkspaceInvitationsPaginated(
   supabase: SupabaseClient,
   page: number = 1,
-  pageSize: number = 20
+  pageSize: number = 20,
+  workspaceId?: string
 ): Promise<PaginatedInvitations> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return {
-        invitations: [],
-        total: 0,
-        page: 1,
-        pageSize,
-        totalPages: 0,
-      };
-    }
+    let targetWorkspaceId = workspaceId;
+    
+    // Si no se proporciona workspaceId, obtenerlo del usuario actual
+    if (!targetWorkspaceId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return {
+          invitations: [],
+          total: 0,
+          page: 1,
+          pageSize,
+          totalPages: 0,
+        };
+      }
 
-    // Obtener el workspace_id del usuario
-    const workspaceId = await getUserWorkspaceId(supabase);
-    if (!workspaceId) {
-      return {
-        invitations: [],
-        total: 0,
-        page,
-        pageSize,
-        totalPages: 0,
-      };
+      targetWorkspaceId = await getUserWorkspaceId(supabase);
+      if (!targetWorkspaceId) {
+        return {
+          invitations: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+        };
+      }
     }
 
     // Calcular el rango para la paginación
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    // Obtener el total de registros
-    const { count, error: countError } = await supabase
+    // Ejecutar consultas en paralelo: conteo y datos
+    const countPromise = supabase
       .from('workspace_invites')
       .select('*', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId);
+      .eq('workspace_id', targetWorkspaceId);
 
-    if (countError) {
-      console.error("[Invitations] Error obteniendo el total de invitaciones:", countError);
+    const dataPromise = supabase
+      .from('workspace_invites')
+      .select('*')
+      .eq('workspace_id', targetWorkspaceId)
+      .order('invited_at', { ascending: false })
+      .range(from, to);
+
+    const [countResult, dataResult] = await Promise.all([
+      countPromise,
+      dataPromise,
+    ]);
+
+    if (countResult.error) {
+      console.error("[Invitations] Error obteniendo el total de invitaciones:", countResult.error);
       return {
         invitations: [],
         total: 0,
@@ -120,19 +142,11 @@ export async function getWorkspaceInvitationsPaginated(
       };
     }
 
-    const total = count || 0;
+    const total = countResult.count || 0;
     const totalPages = Math.ceil(total / pageSize);
 
-    // Obtener las invitaciones paginadas
-    const { data, error } = await supabase
-      .from('workspace_invites')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('invited_at', { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      console.error("[Invitations] Error obteniendo invitaciones paginadas:", error);
+    if (dataResult.error) {
+      console.error("[Invitations] Error obteniendo invitaciones paginadas:", dataResult.error);
       return {
         invitations: [],
         total,
@@ -143,7 +157,7 @@ export async function getWorkspaceInvitationsPaginated(
     }
 
     return {
-      invitations: (data || []) as WorkspaceInvite[],
+      invitations: (dataResult.data || []) as WorkspaceInvite[],
       total,
       page,
       pageSize,

@@ -29,20 +29,29 @@ export interface PaginatedUsers {
 
 /**
  * Obtiene el workspace_id del usuario actual desde workspace_members
+ * @param supabase - Cliente de Supabase
+ * @param userId - (Opcional) ID del usuario. Si no se proporciona, se obtiene del token actual
  */
 export async function getUserWorkspaceId(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  userId?: string
 ): Promise<string | null> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return null;
+    let targetUserId = userId;
+    
+    // Si no se proporciona userId, obtenerlo del token actual
+    if (!targetUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return null;
+      }
+      targetUserId = user.id;
     }
 
     const { data: membership, error } = await supabase
       .from('workspace_members')
       .select('workspace_id')
-      .eq('user_id', user.id)
+      .eq('user_id', targetUserId)
       .eq('status', 'ACTIVE')
       .limit(1)
       .maybeSingle();
@@ -62,6 +71,7 @@ export async function getUserWorkspaceId(
 /**
  * Obtiene los usuarios del workspace del usuario actual con paginación
  * Incluye información de auth.users y profiles
+ * OPTIMIZADO: Usa paginación en la base de datos en lugar de traer todos los registros
  */
 export async function getWorkspaceUsersPaginated(
   supabase: SupabaseClient,
@@ -69,6 +79,7 @@ export async function getWorkspaceUsersPaginated(
   pageSize: number = 20
 ): Promise<PaginatedUsers> {
   try {
+    // Obtener usuario y workspace_id en una sola llamada optimizada
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return {
@@ -80,9 +91,17 @@ export async function getWorkspaceUsersPaginated(
       };
     }
 
-    // Obtener el workspace_id del usuario
-    const workspaceId = await getUserWorkspaceId(supabase);
-    if (!workspaceId) {
+    // Obtener el workspace_id del usuario (reutilizar la llamada de auth.getUser)
+    const { data: membership, error: membershipError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+      .eq('status', 'ACTIVE')
+      .limit(1)
+      .maybeSingle();
+
+    if (membershipError || !membership) {
+      console.error("[Users] Error obteniendo workspace_id:", membershipError);
       return {
         users: [],
         total: 0,
@@ -92,19 +111,33 @@ export async function getWorkspaceUsersPaginated(
       };
     }
 
-    // Calcular el rango para la paginación
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
+    const workspaceId = membership.workspace_id;
 
-    // Obtener el total de registros
-    const { count, error: countError } = await supabase
+    // Calcular el offset para la paginación
+    const offset = (page - 1) * pageSize;
+
+    // Obtener el total de registros (en paralelo con la consulta de datos)
+    const countPromise = supabase
       .from('workspace_members')
       .select('*', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
       .eq('status', 'ACTIVE');
 
-    if (countError) {
-      console.error("[Users] Error obteniendo el total de usuarios:", countError);
+    // Obtener usuarios paginados directamente desde la base de datos
+    const usersPromise = supabase.rpc('get_workspace_users', {
+      workspace_uuid: workspaceId,
+      p_limit: pageSize,
+      p_offset: offset,
+    });
+
+    // Ejecutar ambas consultas en paralelo
+    const [countResult, usersResult] = await Promise.all([
+      countPromise,
+      usersPromise,
+    ]);
+
+    if (countResult.error) {
+      console.error("[Users] Error obteniendo el total de usuarios:", countResult.error);
       return {
         users: [],
         total: 0,
@@ -114,16 +147,11 @@ export async function getWorkspaceUsersPaginated(
       };
     }
 
-    const total = count || 0;
+    const total = countResult.count || 0;
     const totalPages = Math.ceil(total / pageSize);
 
-    // Obtener todos los usuarios del workspace usando la función RPC que hace JOIN completo
-    const { data: allUsers, error: rpcError } = await supabase.rpc('get_workspace_users', {
-      workspace_uuid: workspaceId
-    });
-
-    if (rpcError) {
-      console.error("[Users] Error obteniendo usuarios con RPC:", rpcError);
+    if (usersResult.error) {
+      console.error("[Users] Error obteniendo usuarios con RPC:", usersResult.error);
       return {
         users: [],
         total,
@@ -133,13 +161,8 @@ export async function getWorkspaceUsersPaginated(
       };
     }
 
-    console.log(`[Users] Usuarios obtenidos de la función RPC: ${allUsers?.length || 0}`);
-
-    // Aplicar paginación manualmente después de obtener todos los usuarios
-    const paginatedUsers = (allUsers || []).slice(from, to + 1);
-
     // Mapear los resultados a WorkspaceUser
-    const users: WorkspaceUser[] = paginatedUsers.map((row: any) => {
+    const users: WorkspaceUser[] = (usersResult.data || []).map((row: any) => {
       const displayName = row.full_name || row.email?.split("@")[0] || `Usuario ${row.user_id.substring(0, 8)}`;
       
       return {
@@ -157,8 +180,6 @@ export async function getWorkspaceUsersPaginated(
         last_name: row.last_name || null,
       };
     });
-
-    console.log(`[Users] Total de usuarios procesados después de paginación: ${users.length}`);
 
     return {
       users,

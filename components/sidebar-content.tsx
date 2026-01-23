@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
