@@ -1,0 +1,120 @@
+[
+    {
+        "key": "dashboard",
+        "label": "Dashboard",
+        "path": "/dashboard",
+        "visibleRoles": [
+            "OWNER",
+            "EDITOR",
+            "READER"
+        ]
+    },
+    {
+        "key": "contracts",
+        "label": "Contratos",
+        "path": "/contracts",
+        "visibleRoles": [
+            "OWNER",
+            "EDITOR",
+            "READER"
+        ]
+    },
+    {
+        "key": "folders",
+        "label": "Folders",
+        "path": "/folders",
+        "visibleRoles": [
+            "OWNER",
+            "EDITOR",
+            "READER"
+        ]
+    },
+    {
+        "key": "settings",
+        "label": "Configuración",
+        "path": "/settings",
+        "visibleRoles": [
+            "OWNER",
+            "EDITOR",
+            "READER"
+        ],
+        "children": [
+            {
+                "key": "invitations",
+                "label": "Invitaciones",
+                "path": "/settings/invitations",
+                "visibleRoles": [
+                    "OWNER"
+                ]
+            },
+            {
+                "key": "users",
+                "label": "Usuarios",
+                "path": "/settings/users",
+                "visibleRoles": [
+                    "OWNER"
+                ]
+            },
+            {
+                "key": "workflows",
+                "label": "Flujos de Trabajo",
+                "path": "/settings/workflows",
+                "visibleRoles": [
+                    "OWNER",
+                    "EDITOR"
+                ]
+            },
+            {
+                "key": "contract-profiles",
+                "label": "Perfiles de Contrato",
+                "path": "/settings/contract-profiles",
+                "visibleRoles": [
+                    "OWNER",
+                    "EDITOR"
+                ]
+            },
+            {
+                "key": "reminders",
+                "label": "Recordatorios",
+                "path": "/settings/reminders",
+                "visibleRoles": [
+                    "OWNER",
+                    "EDITOR"
+                ]
+            },
+            {
+                "key": "billing",
+                "label": "Facturación",
+                "path": "/settings/billing",
+                "visibleRoles": [
+                    "OWNER"
+                ]
+            },
+            {
+                "key": "audit-logs",
+                "label": "Registros de Auditoría",
+                "path": "/settings/audit-logs",
+                "visibleRoles": [
+                    "OWNER"
+                ]
+            },
+            {
+                "key": "contract-status",
+                "label": "Estado del Contrato",
+                "path": "/settings/contract-status",
+                "visibleRoles": [
+                    "OWNER",
+                    "EDITOR"
+                ]
+            },
+            {
+                "key": "account-settings",
+                "label": "Configuración de Cuenta",
+                "path": "/settings/account",
+                "visibleRoles": [
+                    "OWNER"
+                ]
+            }
+        ]
+    }
+]

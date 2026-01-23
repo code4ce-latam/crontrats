@@ -1,0 +1,18 @@
+---
+description: Next.js (App Router) — patrones, performance, estructura
+globs:
+  - "app/**/*"
+  - "src/app/**/*"
+  - "src/components/**/*"
+  - "middleware.ts"
+  - "next.config.*"
+alwaysApply: false
+---
+
+- Usa App Router y React Server Components por defecto.
+- Minimiza 'use client'. Si se requiere, justifica por qué.
+- Prefiere Server Actions / Route Handlers para lógica y acceso a datos.
+- No uses APIs/SDKs que requieran secretos en Client Components.
+- Añade loading/error boundaries cuando aplique (UX).
+- Para imágenes: usa `next/image` y define tamaños.
+- Mantén componentes UI “puros” (sin lógica de datos) siempre que se pueda.

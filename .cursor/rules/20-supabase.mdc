@@ -1,0 +1,26 @@
+---
+description: Supabase — SSR, Auth, RLS/policies, llaves y seguridad
+globs:
+  - "src/lib/supabase/**/*"
+  - "src/utils/supabase/**/*"
+  - "supabase/**/*"
+  - "db/**/*"
+  - "**/*supabase*"
+alwaysApply: false
+---
+
+# SSR / Auth
+
+- Para SSR en Next.js, configura Supabase con cookies usando `@supabase/ssr`.
+- Separa cliente de browser vs cliente de server (Server Components / Actions / Route Handlers).
+- La sesión/tokens deben refrescarse vía mecanismo server-side (middleware/proxy), no “a mano” en el cliente.
+
+# Seguridad (obligatorio)
+
+- RLS debe estar habilitado en tablas expuestas y cada acceso debe estar cubierto por policies.
+- Nunca expongas la service role key en frontend (solo server-side como secreto).
+- Asume “zero trust”: si no hay policy, no hay acceso.
+
+# Operación
+
+- Cuando propongas una policy: explica quién puede SELECT/INSERT/UPDATE/DELETE y ejemplos de casos borde.

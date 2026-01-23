@@ -1,0 +1,20 @@
+---
+description: Núcleo del proyecto + preferencia de idioma (ES)
+alwaysApply: true
+---
+
+# Idioma y estilo
+
+- Responde SIEMPRE en español (neutro).
+- Antes de codear: da un plan corto (3–6 bullets) y confirma supuestos si faltan datos.
+- Al entregar cambios: hazlo por archivo (qué cambió y por qué).
+
+# Seguridad / cuidado
+
+- No sugieras ni ejecutes acciones destructivas (drop DB, reset, rm -rf, borrar buckets) sin advertir y pedir confirmación.
+- No expongas secretos en el cliente ni los escribas en el repo.
+
+# Calidad
+
+- TypeScript en archivos nuevos.
+- Prioriza código simple, legible y testeable.

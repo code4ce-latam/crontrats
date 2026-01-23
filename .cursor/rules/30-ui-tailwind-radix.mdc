@@ -1,0 +1,22 @@
+---
+description: UI — Tailwind + Radix Primitives (accesibilidad + consistencia visual)
+globs:
+  - "src/components/**/*"
+  - "src/app/**/*"
+  - "src/styles/**/*"
+  - "**/*.css"
+  - "**/*.tsx"
+alwaysApply: false
+---
+
+# Tailwind
+
+- Usa Tailwind como fuente principal de estilos (utility-first).
+- Mantén consistencia: spacing/typography/radius/shadows con tokens (variables CSS si aplica).
+- Recomienda instalar `prettier-plugin-tailwindcss` para ordenar clases automáticamente.
+
+# Radix UI
+
+- Usa Radix Primitives para componentes headless accesibles (Dialog, Dropdown, Tabs, etc.).
+- No rompas accesibilidad: conserva roles/aria cuando uses `asChild` o personalices triggers.
+- Asegura estados de foco visibles (focus ring) y navegación por teclado.
