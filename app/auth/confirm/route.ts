@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
-import { ensureUserWorkspace } from "@/lib/supabase/workspace";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,23 +19,10 @@ export async function GET(request: NextRequest) {
       token_hash,
     });
     if (!error) {
-      // Auto-crear workspace si el usuario no tiene uno (signup sin invitación)
-      try {
-        console.log("[Auth/Confirm] Verificando usuario después de verificar OTP...");
-        const { data: { user } } = await supabase.auth.getUser();
-        console.log("[Auth/Confirm] Usuario obtenido:", user ? { id: user.id, email: user.email } : "null");
-        if (user) {
-          console.log("[Auth/Confirm] Llamando a ensureUserWorkspace...");
-          const workspaceId = await ensureUserWorkspace(supabase, user.id, user.email);
-          console.log("[Auth/Confirm] Resultado de ensureUserWorkspace:", workspaceId);
-        } else {
-          console.warn("[Auth/Confirm] No se pudo obtener el usuario después de verificar OTP");
-        }
-      } catch (workspaceError) {
-        // Continuar aunque falle la creación del workspace
-        console.error("[Auth/Confirm] Error creando workspace después de confirmar email:", workspaceError);
-        console.error("[Auth/Confirm] Stack trace:", workspaceError instanceof Error ? workspaceError.stack : 'No stack trace');
-      }
+      // El workspace se creará automáticamente cuando el usuario acceda a /protected
+      // a través del componente WorkspaceEnsure o desde el callback de OAuth
+      // No creamos el workspace aquí para evitar duplicados
+      console.log("[Auth/Confirm] Email verificado exitosamente. El workspace se creará automáticamente al acceder a páginas protegidas.");
 
       // redirect user to specified redirect URL or root of app
       redirect(next);

@@ -156,9 +156,9 @@ export function LoginForm({
 
   return (
     <div className={cn("w-full max-w-md", className)} {...props}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+      <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6">
         {/* Logo y Header */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
             <FileText className="w-5 h-5 text-white" />
           </div>
@@ -169,7 +169,7 @@ export function LoginForm({
         </div>
 
         {/* Título e Instrucciones */}
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-1 tracking-tight">
             Iniciar Sesión
           </h1>
@@ -179,9 +179,9 @@ export function LoginForm({
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-3">
           {/* Campo Email */}
-          <div className="space-y-1.5 group">
+          <div className="space-y-1 group">
             <Label htmlFor="email" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600 text-sm">
               Email
             </Label>
@@ -200,7 +200,7 @@ export function LoginForm({
           </div>
 
           {/* Campo Contraseña */}
-          <div className="space-y-1.5 group">
+          <div className="space-y-1 group">
             <div className="flex items-center justify-between">
               <Label htmlFor="password" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600 text-sm">
                 Contraseña
@@ -239,7 +239,7 @@ export function LoginForm({
 
           {/* Mensaje de éxito */}
           {successMessage && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="p-2 bg-green-50 border border-green-200 rounded-lg">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 <p className="text-xs text-green-800">
@@ -251,7 +251,7 @@ export function LoginForm({
 
           {/* Error */}
           {error && (
-            <p className="text-xs text-red-500 bg-red-50 p-2.5 rounded-md">
+            <p className="text-xs text-red-500 bg-red-50 p-2 rounded-md">
               {error}
             </p>
           )}
@@ -274,7 +274,7 @@ export function LoginForm({
         </form>
 
         {/* Divisor */}
-        <div className="relative my-5">
+        <div className="relative my-4">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-gray-300"></span>
           </div>
@@ -302,7 +302,7 @@ export function LoginForm({
         </Button>
 
         {/* Enlace a Sign Up */}
-        <div className="mt-5 text-center text-xs">
+        <div className="mt-4 text-center text-xs">
           <p className="text-gray-600">
             ¿No tienes una cuenta?{" "}
             <Link
@@ -315,7 +315,7 @@ export function LoginForm({
         </div>
 
         {/* Copyright */}
-        <div className="mt-6 text-center text-xs text-gray-500">
+        <div className="mt-4 text-center text-xs text-gray-500">
           © {new Date().getFullYear()} Code4ce. All rights reserved.
         </div>
       </div>

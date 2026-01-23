@@ -70,9 +70,9 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
 
   return (
     <div className={cn("w-full max-w-md")}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+      <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6">
         {/* Logo y Header */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
             <FileText className="w-5 h-5 text-white" />
           </div>
@@ -83,11 +83,11 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
         </div>
 
         {/* Título e Instrucciones */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 tracking-tight">
             Crear tu Cuenta
           </h1>
-          <p className="text-gray-500">
+          <p className="text-sm text-gray-500">
             {inviteDisplayName ? (
               <>
                 Hola <strong>{inviteDisplayName}</strong>, has sido invitado a unirte al workspace.
@@ -96,20 +96,20 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
               <>Has sido invitado a unirte al workspace.</>
             )}
           </p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-xs text-gray-400 mt-1">
             Email: <span className="font-medium">{inviteEmail}</span>
           </p>
         </div>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {/* Campo Contraseña */}
-          <div className="space-y-2 group">
-            <Label htmlFor="password" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600">
+          <div className="space-y-1 group">
+            <Label htmlFor="password" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600 text-sm">
               Contraseña
             </Label>
             <div className="relative transition-transform duration-200 focus-within:scale-[1.01]">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-colors group-focus-within:text-blue-500" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 transition-colors group-focus-within:text-blue-500" />
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
@@ -117,7 +117,7 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 pr-10 h-12 bg-gray-50/50 border-gray-200 focus:bg-white"
+                className="pl-9 pr-9 h-10 bg-gray-50/50 border-gray-200 focus:bg-white text-sm"
                 disabled={isLoading}
               />
               <button
@@ -126,9 +126,9 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
               >
                 {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
+                  <EyeOff className="w-4 h-4" />
                 ) : (
-                  <Eye className="w-5 h-5" />
+                  <Eye className="w-4 h-4" />
                 )}
               </button>
             </div>
@@ -136,12 +136,12 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
           </div>
 
           {/* Campo Confirmar Contraseña */}
-          <div className="space-y-2 group">
-            <Label htmlFor="repeat-password" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600">
+          <div className="space-y-1 group">
+            <Label htmlFor="repeat-password" className="text-gray-700 font-medium transition-colors group-focus-within:text-blue-600 text-sm">
               Confirmar Contraseña
             </Label>
             <div className="relative transition-transform duration-200 focus-within:scale-[1.01]">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-colors group-focus-within:text-blue-500" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 transition-colors group-focus-within:text-blue-500" />
               <Input
                 id="repeat-password"
                 type={showRepeatPassword ? "text" : "password"}
@@ -149,7 +149,7 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
                 required
                 value={repeatPassword}
                 onChange={(e) => setRepeatPassword(e.target.value)}
-                className="pl-10 pr-10 h-12 bg-gray-50/50 border-gray-200 focus:bg-white"
+                className="pl-9 pr-9 h-10 bg-gray-50/50 border-gray-200 focus:bg-white text-sm"
                 disabled={isLoading}
               />
               <button
@@ -158,9 +158,9 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
               >
                 {showRepeatPassword ? (
-                  <EyeOff className="w-5 h-5" />
+                  <EyeOff className="w-4 h-4" />
                 ) : (
-                  <Eye className="w-5 h-5" />
+                  <Eye className="w-4 h-4" />
                 )}
               </button>
             </div>
@@ -168,15 +168,15 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
 
           {/* Mensaje de error */}
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">{error}</p>
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-xs text-red-800">{error}</p>
             </div>
           )}
 
           {/* Botón de envío */}
           <Button
             type="submit"
-            className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg shadow-blue-600/20 transition-all duration-200 hover:shadow-xl hover:shadow-blue-600/30"
+            className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             disabled={isLoading}
           >
             {isLoading ? "Creando cuenta..." : "Crear Cuenta"}

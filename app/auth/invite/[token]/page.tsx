@@ -49,11 +49,6 @@ export default async function AcceptInvitePage({ params }: PageProps) {
           <AcceptInviteForm token={token} inviteEmail={invite.email} inviteDisplayName={invite.display_name} />
         </div>
       </div>
-
-      {/* Footer */}
-      <div className="text-center py-4 text-sm text-gray-500 bg-white">
-        © {new Date().getFullYear()} Code4ce. All rights reserved.
-      </div>
     </div>
   );
 }

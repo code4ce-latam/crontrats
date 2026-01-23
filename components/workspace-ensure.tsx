@@ -2,12 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ensureUserWorkspace } from "@/lib/supabase/workspace";
 
 /**
  * Componente que asegura que el usuario tenga un workspace.
  * Se ejecuta automáticamente cuando el usuario accede a páginas protegidas.
- * Útil para casos donde el usuario se registró sin pasar por el flujo de confirmación de email.
+ * Llama a una API route del servidor para crear el workspace de forma segura.
  */
 export function WorkspaceEnsure() {
   const hasRunRef = useRef(false);
@@ -27,32 +26,47 @@ export function WorkspaceEnsure() {
         
         console.log("[WorkspaceEnsure] Usuario obtenido:", user ? { id: user.id, email: user.email } : "null");
         
-        if (user) {
-          // Verificar si el usuario ya tiene un workspace
-          console.log("[WorkspaceEnsure] Verificando membresías existentes...");
-          const { data: existingMembership, error: checkError } = await supabase
-            .from('workspace_members')
-            .select('workspace_id')
-            .eq('user_id', user.id)
-            .limit(1)
-            .maybeSingle();
+        if (!user) {
+          console.warn("[WorkspaceEnsure] No se pudo obtener el usuario");
+          return;
+        }
 
-          if (checkError) {
-            console.error("[WorkspaceEnsure] Error verificando membresías:", checkError);
-          }
+        // Verificar si el usuario ya tiene un workspace (verificación rápida en el cliente)
+        const { data: existingMembership, error: checkError } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', user.id)
+          .eq('status', 'ACTIVE')
+          .limit(1)
+          .maybeSingle();
 
-          console.log("[WorkspaceEnsure] Resultado de verificación:", existingMembership);
+        if (checkError) {
+          console.error("[WorkspaceEnsure] Error verificando membresías:", checkError);
+          // Continuar intentando crear el workspace a través de la API
+        }
 
-          // Si no tiene workspace, crearlo automáticamente
-          if (!existingMembership) {
-            console.log("[WorkspaceEnsure] No se encontró workspace, creando uno nuevo...");
-            const workspaceId = await ensureUserWorkspace(supabase, user.id, user.email);
-            console.log("[WorkspaceEnsure] Resultado de ensureUserWorkspace:", workspaceId);
+        console.log("[WorkspaceEnsure] Resultado de verificación:", existingMembership);
+
+        // Si no tiene workspace, llamar a la API route del servidor para crearlo
+        if (!existingMembership) {
+          console.log("[WorkspaceEnsure] No se encontró workspace, llamando a API para crear uno nuevo...");
+          
+          const response = await fetch('/api/workspace/ensure', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            console.log("[WorkspaceEnsure] Workspace creado/verificado exitosamente:", data.workspace_id);
           } else {
-            console.log("[WorkspaceEnsure] Usuario ya tiene workspace:", existingMembership.workspace_id);
+            console.error("[WorkspaceEnsure] Error creando workspace:", data.error);
           }
         } else {
-          console.warn("[WorkspaceEnsure] No se pudo obtener el usuario");
+          console.log("[WorkspaceEnsure] Usuario ya tiene workspace:", existingMembership.workspace_id);
         }
       } catch (error) {
         // Silenciosamente fallar - no queremos interrumpir la experiencia del usuario

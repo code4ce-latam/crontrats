@@ -40,14 +40,6 @@
         ],
         "children": [
             {
-                "key": "invitations",
-                "label": "Invitaciones",
-                "path": "/settings/invitations",
-                "visibleRoles": [
-                    "OWNER"
-                ]
-            },
-            {
                 "key": "users",
                 "label": "Usuarios",
                 "path": "/settings/users",
@@ -56,12 +48,11 @@
                 ]
             },
             {
-                "key": "workflows",
-                "label": "Flujos de Trabajo",
-                "path": "/settings/workflows",
+                "key": "invitations",
+                "label": "Invitaciones",
+                "path": "/settings/invitations",
                 "visibleRoles": [
-                    "OWNER",
-                    "EDITOR"
+                    "OWNER"
                 ]
             },
             {
@@ -77,6 +68,15 @@
                 "key": "reminders",
                 "label": "Recordatorios",
                 "path": "/settings/reminders",
+                "visibleRoles": [
+                    "OWNER",
+                    "EDITOR"
+                ]
+            },
+            {
+                "key": "workflows",
+                "label": "Flujos de Trabajo",
+                "path": "/settings/workflows",
                 "visibleRoles": [
                     "OWNER",
                     "EDITOR"

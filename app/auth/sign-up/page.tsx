@@ -32,11 +32,6 @@ export default function Page() {
           <SignUpForm />
         </div>
       </div>
-
-      {/* Footer */}
-      <div className="text-center py-4 text-sm text-gray-500 bg-white">
-        © 2025 Code4ce. All rights reserved.
-      </div>
     </div>
   );
 }

@@ -21,7 +21,9 @@ export type EntityType =
   | 'document'
   | 'avatar'
   | 'workspace_member'
-  | 'workspace_invite';
+  | 'workspace_invite'
+  | 'contract_profile'
+  | 'contract_profile_field';
 
 export interface Activity {
   id: string;
