@@ -333,6 +333,25 @@ export function FolderTree({
 }: FolderTreeProps) {
   const [isCreateRootDialogOpen, setIsCreateRootDialogOpen] = useState(false);
 
+  // Función helper para encontrar una carpeta en el árbol
+  const findFolderInTree = (tree: FolderTreeItem[], folderId: string): FolderTreeItem | null => {
+    for (const item of tree) {
+      if (item.id === folderId) return item;
+      if (item.children) {
+        const found = findFolderInTree(item.children, folderId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // Determinar el parentId basado en la carpeta seleccionada
+  const getParentIdForNewFolder = (): string | null => {
+    if (!selectedFolderId) return null;
+    const selectedFolder = findFolderInTree(initialTree, selectedFolderId);
+    return selectedFolder ? selectedFolder.id : null;
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
@@ -378,7 +397,7 @@ export function FolderTree({
       <CreateFolderDialog
         open={isCreateRootDialogOpen}
         onOpenChange={setIsCreateRootDialogOpen}
-        parentId={null}
+        parentId={getParentIdForNewFolder()}
         workspaceId={workspaceId}
         onSuccess={() => {
           setIsCreateRootDialogOpen(false);
