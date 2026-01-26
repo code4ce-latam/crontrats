@@ -10,7 +10,12 @@ export type ActivityType =
   | 'UPLOAD'
   | 'DOWNLOAD'
   | 'SHARE'
-  | 'COMMENT';
+  | 'COMMENT'
+  | 'CONTRACT_CREATED'
+  | 'CONTRACT_UPDATED'
+  | 'CONTRACT_STATUS_CHANGED'
+  | 'CONTRACT_MAIN_VERSION_UPLOADED'
+  | 'CONTRACT_ATTACHMENT_UPLOADED';
 
 export type EntityType = 
   | 'contract' 

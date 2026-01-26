@@ -33,15 +33,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar si el usuario ya existe
+    // En Supabase v2, getUserByEmail no existe, usamos listUsers con filtro
     let existingUser;
     try {
-      const { data: userData, error: getUserError } = await supabase.auth.admin.getUserByEmail(invite.email);
-      if (!getUserError && userData?.user) {
-        existingUser = userData.user;
+      const { data: usersData, error: listUsersError } = await supabase.auth.admin.listUsers({
+        filter: {
+          email: invite.email,
+        },
+      });
+      if (!listUsersError && usersData?.users && usersData.users.length > 0) {
+        existingUser = usersData.users[0];
       }
     } catch (error) {
-      // Si el usuario no existe, getUserByEmail puede lanzar un error
-      // Esto es normal, continuamos con la creación del usuario
+      // Si el usuario no existe, continuamos con la creación del usuario
       console.log("[AcceptInvite] Usuario no existe, se creará uno nuevo");
     }
 

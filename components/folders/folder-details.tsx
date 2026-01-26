@@ -11,7 +11,10 @@ import {
   Trash2,
   Users,
   Plus,
+  FileText,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { getStatusLabel, getStatusBadgeVariant } from "@/lib/contracts-utils";
 import { RenameFolderDialog } from "./rename-folder-dialog";
 import { FolderPermissionsDrawer } from "./folder-permissions-drawer";
 import { FolderActionsMenu } from "./folder-actions-menu";
@@ -57,6 +60,9 @@ export function FolderDetails({ folderId, workspaceId, tree, onRefresh }: Folder
   const [isCreateSubfolderDialogOpen, setIsCreateSubfolderDialogOpen] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [isLoadingContracts, setIsLoadingContracts] = useState(false);
+  const router = useRouter();
 
   // Memoizar el mapa de carpetas y la carpeta encontrada para evitar recalcular
   const { folderMap, foundFolder } = useMemo(() => {
@@ -135,6 +141,25 @@ export function FolderDetails({ folderId, workspaceId, tree, onRefresh }: Folder
     }
   }, []);
 
+  // Función para cargar contratos
+  const loadContracts = useCallback(async (id: string) => {
+    setIsLoadingContracts(true);
+    try {
+      const response = await fetch(`/api/contracts/list?folder_id=${id}`, {
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setContracts(data.contracts || []);
+      }
+    } catch (error) {
+      console.error("[FolderDetails] Error cargando contratos:", error);
+      setContracts([]);
+    } finally {
+      setIsLoadingContracts(false);
+    }
+  }, []);
+
   // Cargar información de la carpeta cuando cambia folderId
   useEffect(() => {
     if (!foundFolder) {
@@ -180,9 +205,10 @@ export function FolderDetails({ folderId, workspaceId, tree, onRefresh }: Folder
     setFolderPath(pathItems);
     setIsLoading(false);
     
-    // Cargar participantes (no bloquea la UI, se ejecuta en paralelo)
+    // Cargar participantes y contratos (no bloquea la UI, se ejecuta en paralelo)
     loadParticipants(foundFolder.id);
-  }, [foundFolder, folderMap, loadParticipants]);
+    loadContracts(foundFolder.id);
+  }, [foundFolder, folderMap, loadParticipants, loadContracts]);
 
   if (isLoading) {
     return (
@@ -228,129 +254,228 @@ export function FolderDetails({ folderId, workspaceId, tree, onRefresh }: Folder
   };
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <Folder className="h-6 w-6 text-muted-foreground" />
-              <div>
-                <CardTitle className="text-xl">{folder.name}</CardTitle>
-              </div>
-            </div>
-            {canManage && (
-              <FolderActionsMenu
-                folderId={folder.id}
-                folderName={folder.name}
-                onRename={() => setIsRenameDialogOpen(true)}
-                onDelete={onRefresh}
-                onPermissions={() => setIsPermissionsDrawerOpen(true)}
-              />
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Ruta</p>
+    <div className="h-full flex flex-col">
+      <Card className="flex flex-col flex-1 overflow-hidden border-none shadow-none rounded-none">
+        <div className="px-6 py-3 border-b shrink-0 flex flex-col gap-2">
+          {/* Fila 1: Ruta */}
+          <div className="flex items-center text-xs text-muted-foreground">
+            <Folder className="h-3 w-3 mr-1" />
             {folderPath.length > 0 ? (
-              <div className="flex items-center gap-1 mt-1 flex-wrap">
+              <div className="flex items-center flex-wrap gap-1">
                 {folderPath.map((item, index) => (
-                  <span key={item.id} className="flex items-center gap-1">
-                    <span className="text-sm text-foreground">{item.name}</span>
+                  <span key={item.id} className="flex items-center">
+                    <span className={`hover:text-foreground transition-colors ${index === folderPath.length - 1 ? "font-semibold text-foreground" : ""}`}>
+                      {item.name}
+                    </span>
                     {index < folderPath.length - 1 && (
-                      <span className="text-muted-foreground">/</span>
+                      <span className="mx-1">/</span>
                     )}
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="text-sm font-mono mt-1 text-muted-foreground">{folder.path}</p>
+              <span className="font-semibold text-foreground">{folder.path}</span>
             )}
           </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Creada</p>
-            <p className="text-sm mt-1">{formatDate(folder.created_at)}</p>
-          </div>
-
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Participantes</p>
-            {isLoadingParticipants ? (
-              <p className="text-sm text-muted-foreground">Cargando participantes...</p>
-            ) : participants.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {participants.map((participant) => (
-                  <div 
-                    key={participant.member_id} 
-                    className="flex items-center gap-2 p-1 pr-2 bg-background rounded-full border shadow-sm"
-                    title={`${participant.display_name || participant.email} (${participant.access})`}
-                  >
-                    {participant.avatar_url ? (
-                      <img
-                        src={participant.avatar_url}
-                        alt={participant.display_name || 'Usuario'}
-                        className="h-6 w-6 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-[10px] font-semibold text-primary">
-                          {(participant.display_name || participant.email || 'U').charAt(0).toUpperCase()}
-                        </span>
+          
+          {/* Fila 2: Info y Acciones */}
+          <div className="flex items-center justify-between">
+            {/* Izquierda: Metadata (Fecha y Participantes) */}
+            <div className="flex items-center gap-4 text-sm">
+              <div className="text-muted-foreground whitespace-nowrap text-xs">
+                Creada el {formatDate(folder.created_at)}
+              </div>
+              
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-muted-foreground whitespace-nowrap text-xs">Participantes:</span>
+                {isLoadingParticipants ? (
+                  <span className="text-muted-foreground animate-pulse text-xs">...</span>
+                ) : participants.length > 0 ? (
+                  <div className="flex -space-x-2 overflow-hidden hover:space-x-1 transition-all duration-200">
+                    {participants.slice(0, 5).map((participant) => (
+                      <div 
+                        key={participant.member_id}
+                        className="relative z-0 hover:z-10 transition-all"
+                        title={`${participant.display_name || participant.email} (${getRoleLabel(participant.access)})`}
+                      >
+                        {participant.avatar_url ? (
+                          <img
+                            src={participant.avatar_url}
+                            alt={participant.display_name || 'Usuario'}
+                            className="h-6 w-6 rounded-full object-cover border-2 border-background ring-1 ring-border"
+                          />
+                        ) : (
+                          <div className="h-6 w-6 rounded-full bg-primary/10 border-2 border-background ring-1 ring-border flex items-center justify-center">
+                            <span className="text-[9px] font-bold text-primary">
+                              {(participant.display_name || participant.email || 'U').charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {participants.length > 5 && (
+                      <div className="h-6 w-6 rounded-full bg-muted border-2 border-background ring-1 ring-border flex items-center justify-center relative z-0">
+                        <span className="text-[9px] font-medium text-muted-foreground">+{participants.length - 5}</span>
                       </div>
                     )}
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium max-w-[150px] truncate leading-tight">
-                        {participant.display_name || participant.email}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground leading-tight">
-                        {getRoleLabel(participant.access)}
-                      </span>
-                    </div>
                   </div>
-                ))}
+                ) : (
+                  <span className="text-muted-foreground italic text-xs">Ninguno</span>
+                )}
+              </div>
+            </div>
+
+            {/* Derecha: Acciones */}
+            <div className="flex items-center gap-2">
+              {(access === 'EDIT' || access === 'OWNER') && (
+                <Button
+                  size="sm"
+                  onClick={() => router.push(`/protected/contratos/nuevo?folder_id=${folder.id}`)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo contrato
+                </Button>
+              )}
+              {canManage && (
+                <FolderActionsMenu
+                  folderId={folder.id}
+                  folderName={folder.name}
+                  onRename={() => setIsRenameDialogOpen(true)}
+                  onDelete={onRefresh}
+                  onPermissions={() => setIsPermissionsDrawerOpen(true)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <CardContent className="flex-1 overflow-hidden p-0 flex flex-col bg-muted/5">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {isLoadingContracts ? (
+              <div className="flex items-center justify-center h-32">
+                <p className="text-sm text-muted-foreground">Cargando contratos...</p>
+              </div>
+            ) : contracts.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Título
+                      </th>
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Estado
+                      </th>
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Fecha Inicio
+                      </th>
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Fecha Fin
+                      </th>
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Actualizado
+                      </th>
+                      <th className="text-left py-1.5 px-3 text-sm font-semibold text-foreground whitespace-nowrap">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contracts.map((contract) => (
+                      <tr
+                        key={contract.id}
+                        className="border-b border-border hover:bg-accent/50 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/protected/contratos/${contract.id}`)}
+                      >
+                        <td className="py-1.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <FileText className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="text-sm text-foreground font-medium">
+                              {contract.title}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-3 whitespace-nowrap">
+                          <Badge
+                            variant={getStatusBadgeVariant(contract.status)}
+                            className="text-xs font-medium"
+                          >
+                            {getStatusLabel(contract.status)}
+                          </Badge>
+                        </td>
+                        <td className="py-1.5 px-3 whitespace-nowrap">
+                          <span className="text-sm text-muted-foreground">
+                            {contract.start_date ? new Date(contract.start_date).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            }) : '-'}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-3 whitespace-nowrap">
+                          <span className="text-sm text-muted-foreground">
+                            {contract.end_date ? new Date(contract.end_date).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            }) : '-'}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-3 whitespace-nowrap">
+                          <span className="text-sm text-muted-foreground">
+                            {contract.updated_at ? new Date(contract.updated_at).toLocaleString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }) : '-'}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-3 whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/protected/contratos/${contract.id}/editar`);
+                            }}
+                            title="Editar contrato"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Editar
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No hay participantes asignados</p>
+              <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center p-8 border-2 border-dashed border-muted rounded-lg bg-background/50">
+                <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                  <FileText className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium mb-1">No hay contratos</h3>
+                <p className="text-xs text-muted-foreground max-w-xs mb-4">
+                  Esta carpeta está vacía. Comienza creando un nuevo contrato aquí.
+                </p>
+                {(access === 'EDIT' || access === 'OWNER') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/protected/contratos/nuevo?folder_id=${folder.id}`)}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear primer contrato
+                  </Button>
+                )}
+              </div>
             )}
           </div>
-
-          {canManage && (
-            <div className="flex flex-wrap gap-2 pt-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateSubfolderDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Crear subcarpeta
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRenameDialogOpen(true)}
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Renombrar
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsPermissionsDrawerOpen(true)}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Permisos
-              </Button>
-            </div>
-          )}
-
-          {!canManage && (
-            <div className="pt-4 border-t">
-              <p className="text-sm text-muted-foreground">
-                {access === 'EDIT' 
-                  ? 'Tienes permisos de edición en esta carpeta'
-                  : 'Tienes permisos de solo lectura en esta carpeta'}
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
