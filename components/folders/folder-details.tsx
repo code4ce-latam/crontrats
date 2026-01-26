@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { type FolderAccess } from "@/lib/supabase/folders";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { type FolderAccess, type FolderTreeItem } from "@/lib/supabase/folders";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -20,6 +20,7 @@ import { CreateFolderDialog } from "./create-folder-dialog";
 interface FolderDetailsProps {
   folderId: string;
   workspaceId: string;
+  tree: FolderTreeItem[];
   onRefresh: () => void;
 }
 
@@ -46,7 +47,7 @@ interface Participant {
   access: FolderAccess;
 }
 
-export function FolderDetails({ folderId, workspaceId, onRefresh }: FolderDetailsProps) {
+export function FolderDetails({ folderId, workspaceId, tree, onRefresh }: FolderDetailsProps) {
   const [folder, setFolder] = useState<FolderInfo | null>(null);
   const [folderPath, setFolderPath] = useState<FolderPathItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,11 +58,37 @@ export function FolderDetails({ folderId, workspaceId, onRefresh }: FolderDetail
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
 
+  // Memoizar el mapa de carpetas y la carpeta encontrada para evitar recalcular
+  const { folderMap, foundFolder } = useMemo(() => {
+    const map = new Map<string, FolderTreeItem>();
+    const buildFolderMap = (items: FolderTreeItem[]) => {
+      items.forEach(item => {
+        map.set(item.id, item);
+        if (item.children) {
+          buildFolderMap(item.children);
+        }
+      });
+    };
+    buildFolderMap(tree);
+    
+    const findFolder = (items: FolderTreeItem[]): FolderTreeItem | null => {
+      for (const item of items) {
+        if (item.id === folderId) return item;
+        if (item.children) {
+          const found = findFolder(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    return { folderMap: map, foundFolder: findFolder(tree) };
+  }, [tree, folderId]);
+
+  // Cargar información de workspace owner solo una vez (no cambia entre carpetas)
   useEffect(() => {
-    async function loadFolder() {
-      setIsLoading(true);
+    async function loadWorkspaceOwner() {
       try {
-        // Verificar si el usuario es OWNER del workspace
         const { createClient } = await import("@/lib/supabase/client");
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -76,100 +103,86 @@ export function FolderDetails({ folderId, workspaceId, onRefresh }: FolderDetail
           
           setIsWorkspaceOwner(membership?.role === 'OWNER');
         }
-
-        // Obtener información de la carpeta desde el árbol
-        const response = await fetch(`/api/folders/tree?workspace_id=${workspaceId}`);
-        if (response.ok) {
-          const data = await response.json();
-          
-          // Función recursiva para encontrar carpeta y construir mapa de todas las carpetas
-          const folderMap = new Map<string, any>();
-          const buildFolderMap = (items: any[]) => {
-            items.forEach(item => {
-              folderMap.set(item.id, item);
-              if (item.children) {
-                buildFolderMap(item.children);
-              }
-            });
-          };
-          buildFolderMap(data.tree || []);
-          
-          const findFolder = (items: any[]): any => {
-            for (const item of items) {
-              if (item.id === folderId) return item;
-              if (item.children) {
-                const found = findFolder(item.children);
-                if (found) return found;
-              }
-            }
-            return null;
-          };
-          
-          const found = findFolder(data.tree || []);
-          if (found) {
-            setFolder({
-              id: found.id,
-              name: found.name,
-              path: found.path,
-              created_at: found.created_at,
-              parent_id: found.parent_id,
-              access: found.access,
-            });
-
-            // Construir ruta jerárquica desde el path
-            // El path tiene formato: "uuid1" o "uuid1.uuid2.uuid3"
-            const pathIds = found.path.split('.');
-            const pathItems: FolderPathItem[] = [];
-            
-            for (const pathId of pathIds) {
-              const pathFolder = folderMap.get(pathId);
-              if (pathFolder) {
-                pathItems.push({
-                  id: pathFolder.id,
-                  name: pathFolder.name,
-                });
-              }
-            }
-            
-            setFolderPath(pathItems);
-            
-            // Cargar participantes
-            loadParticipants(found.id);
-          }
-        }
       } catch (error) {
-        console.error("[FolderDetails] Error cargando carpeta:", error);
-      } finally {
-        setIsLoading(false);
+        console.error("[FolderDetails] Error verificando workspace owner:", error);
       }
     }
+    loadWorkspaceOwner();
+  }, [workspaceId]);
 
-    async function loadParticipants(id: string) {
-      setIsLoadingParticipants(true);
-      try {
-        const response = await fetch(`/api/folders/permissions?folder_id=${id}`);
-        if (response.ok) {
-          const data = await response.json();
-          const allParticipants: Participant[] = [
-            ...data.permissions.OWNER,
-            ...data.permissions.EDIT,
-            ...data.permissions.READ
-          ];
-          // Eliminar duplicados si los hubiera (aunque el backend ya lo maneja)
-          const uniqueParticipants = Array.from(new Map(allParticipants.map(p => [p.member_id, p])).values());
-          setParticipants(uniqueParticipants);
-        }
-      } catch (error) {
-        console.error("[FolderDetails] Error cargando participantes:", error);
-      } finally {
-        setIsLoadingParticipants(false);
+  // Función para cargar participantes (memoizada para evitar recrearla)
+  const loadParticipants = useCallback(async (id: string) => {
+    setIsLoadingParticipants(true);
+    try {
+      const response = await fetch(`/api/folders/permissions?folder_id=${id}`, {
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const allParticipants: Participant[] = [
+          ...data.permissions.OWNER,
+          ...data.permissions.EDIT,
+          ...data.permissions.READ
+        ];
+        // Eliminar duplicados si los hubiera (aunque el backend ya lo maneja)
+        const uniqueParticipants = Array.from(new Map(allParticipants.map(p => [p.member_id, p])).values());
+        setParticipants(uniqueParticipants);
+      }
+    } catch (error) {
+      console.error("[FolderDetails] Error cargando participantes:", error);
+    } finally {
+      setIsLoadingParticipants(false);
+    }
+  }, []);
+
+  // Cargar información de la carpeta cuando cambia folderId
+  useEffect(() => {
+    if (!foundFolder) {
+      setFolder(null);
+      setFolderPath([]);
+      setParticipants([]);
+      setIsLoading(false);
+      return;
+    }
+
+    // La información de la carpeta ya está en memoria, no necesita fetch
+    setIsLoading(true);
+    
+    setFolder({
+      id: foundFolder.id,
+      name: foundFolder.name,
+      path: foundFolder.path,
+      created_at: foundFolder.created_at,
+      parent_id: foundFolder.parent_id,
+      access: foundFolder.access,
+    });
+
+    // Construir ruta jerárquica desde el path
+    // El path tiene formato: "uuid1" o "uuid1.uuid2.uuid3"
+    // IMPORTANTE: Solo mostramos carpetas que están en folderMap (accesibles al usuario)
+    // Si el usuario solo tiene acceso a una subcarpeta, solo verá esa subcarpeta en la ruta
+    // Si tiene acceso a múltiples niveles consecutivos, verá desde el primer nivel accesible
+    const pathIds = foundFolder.path.split('.');
+    const pathItems: FolderPathItem[] = [];
+    
+    for (const pathId of pathIds) {
+      const pathFolder = folderMap.get(pathId);
+      // Solo agregar carpetas accesibles (que están en folderMap)
+      // Las carpetas no accesibles no estarán en folderMap debido a RLS
+      if (pathFolder) {
+        pathItems.push({
+          id: pathFolder.id,
+          name: pathFolder.name,
+        });
       }
     }
-
-    if (folderId) {
-      loadFolder();
-    }
-  }, [folderId, workspaceId]);
+    
+    setFolderPath(pathItems);
+    setIsLoading(false);
+    
+    // Cargar participantes (no bloquea la UI, se ejecuta en paralelo)
+    loadParticipants(foundFolder.id);
+  }, [foundFolder, folderMap, loadParticipants]);
 
   if (isLoading) {
     return (
@@ -357,6 +370,7 @@ export function FolderDetails({ folderId, workspaceId, onRefresh }: FolderDetail
         onOpenChange={setIsPermissionsDrawerOpen}
         folderId={folder.id}
         workspaceId={workspaceId}
+        tree={tree}
         onSuccess={onRefresh}
       />
 

@@ -106,14 +106,6 @@
                     "OWNER",
                     "EDITOR"
                 ]
-            },
-            {
-                "key": "account-settings",
-                "label": "Configuración de Cuenta",
-                "path": "/settings/account",
-                "visibleRoles": [
-                    "OWNER"
-                ]
             }
         ]
     }

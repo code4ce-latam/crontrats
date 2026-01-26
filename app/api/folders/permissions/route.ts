@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
-import { getUserWorkspaceId, getFolderAccess, getFolderPermissions } from "@/lib/supabase/folders";
+import { getUserWorkspaceId, getFolderAccess, getFolderPermissions, getFolderParticipants } from "@/lib/supabase/folders";
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,9 +24,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verificar que el usuario tiene OWNER en esta carpeta
+    // Verificar que el usuario tiene acceso a esta carpeta (OWNER, EDIT, READ)
     const access = await getFolderAccess(supabase, folder_id);
-    // Permitir ver permisos a cualquier usuario con acceso (OWNER, EDIT, READ)
     if (!access) {
       return NextResponse.json(
         { error: "No tienes acceso a esta carpeta" },
@@ -34,8 +33,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Obtener permisos con información de miembros
-    const permissions = await getFolderPermissions(supabase, folder_id);
+    // Obtener participantes (cualquier usuario con acceso puede ver)
+    // Si es OWNER, también puede usar getFolderPermissions para gestión
+    const permissions = access === 'OWNER' 
+      ? await getFolderPermissions(supabase, folder_id)
+      : await getFolderParticipants(supabase, folder_id);
 
     // Agrupar por access
     const grouped = {

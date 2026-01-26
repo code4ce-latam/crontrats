@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
   DropdownMenu,
@@ -36,6 +36,7 @@ export function UserAvatarMenu({
 }: UserAvatarMenuProps) {
   const router = useRouter();
   const [resolvedAvatarUrl, setResolvedAvatarUrl] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     if (avatarUrl) {
@@ -47,6 +48,30 @@ export function UserAvatarMenu({
       setResolvedAvatarUrl(null);
     }
   }, [avatarUrl]);
+
+  // Verificar si el usuario es OWNER
+  useEffect(() => {
+    async function checkUserRole() {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: membership } = await supabase
+            .from('workspace_members')
+            .select('role')
+            .eq('user_id', user.id)
+            .eq('status', 'ACTIVE')
+            .maybeSingle();
+          
+          setIsOwner(membership?.role === 'OWNER');
+        }
+      } catch (error) {
+        console.error("[UserAvatarMenu] Error verificando rol:", error);
+        setIsOwner(false);
+      }
+    }
+    checkUserRole();
+  }, []);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -98,6 +123,17 @@ export function UserAvatarMenu({
             <span>Perfil</span>
           </Link>
         </DropdownMenuItem>
+        {isOwner && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/protected/configuracion-cuenta" className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Configuración de la cuenta</span>
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
           <LogOut className="mr-2 h-4 w-4" />

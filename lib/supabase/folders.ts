@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "./admin";
 
 export type FolderAccess = 'OWNER' | 'EDIT' | 'READ';
 
@@ -266,6 +267,112 @@ export async function getWorkspaceFoldersTree(
     return roots;
   } catch (error) {
     console.error("[Folders] Error inesperado obteniendo árbol:", error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene los participantes de una carpeta (cualquier usuario con acceso puede ver)
+ * Incluye información de los miembros
+ * Nota: Usa admin client para usuarios READ/EDIT ya que RLS solo permite ver permisos propios o si eres OWNER
+ */
+export async function getFolderParticipants(
+  supabase: SupabaseClient,
+  folderId: string
+): Promise<FolderPermissionsWithMember[]> {
+  try {
+    // Verificar que el usuario tiene acceso a esta carpeta (OWNER, EDIT o READ)
+    const access = await getFolderAccess(supabase, folderId);
+    if (!access) {
+      console.error("[Folders] Usuario no tiene acceso a esta carpeta");
+      return [];
+    }
+
+    // Si el usuario es OWNER, puede usar el cliente normal (RLS lo permite)
+    // Si es READ o EDIT, necesitamos usar admin client (RLS no permite ver permisos de otros)
+    const clientToUse = access === 'OWNER' ? supabase : createAdminClient();
+
+    // Obtener permisos
+    const { data: permissions, error } = await clientToUse
+      .from('folder_permissions')
+      .select('id, folder_id, member_id, access')
+      .eq('folder_id', folderId);
+
+    if (error) {
+      console.error("[Folders] Error obteniendo permisos:", error);
+      return [];
+    }
+
+    if (!permissions || permissions.length === 0) {
+      return [];
+    }
+
+    // Obtener información de miembros
+    const memberIds = permissions.map(p => p.member_id);
+    const { data: members, error: membersError } = await supabase
+      .from('workspace_members')
+      .select('id, user_id')
+      .in('id', memberIds);
+
+    if (membersError || !members) {
+      console.error("[Folders] Error obteniendo miembros:", membersError);
+      return [];
+    }
+
+    // Crear mapa de member_id -> user_id
+    const memberToUserMap = new Map<string, string>();
+    members.forEach(m => {
+      memberToUserMap.set(m.id, m.user_id);
+    });
+
+    // Obtener información de usuarios usando la función RPC existente
+    const workspaceId = await getUserWorkspaceId(supabase);
+    if (!workspaceId) {
+      return [];
+    }
+
+    const { data: users } = await supabase.rpc('get_workspace_users', {
+      workspace_uuid: workspaceId,
+    });
+
+    // Crear mapa de user_id -> información de usuario
+    const userMap = new Map<string, any>();
+    (users || []).forEach((u: any) => {
+      userMap.set(u.user_id, {
+        email: u.email,
+        display_name: u.full_name || u.email?.split("@")[0] || `Usuario ${u.user_id.substring(0, 8)}`,
+        avatar_url: u.avatar_url,
+      });
+    });
+
+    // Combinar permisos con información de miembros
+    const result: FolderPermissionsWithMember[] = permissions.map((p: any) => {
+      const userId = memberToUserMap.get(p.member_id);
+      const userInfo = userId ? (userMap.get(userId) || {
+        email: null,
+        display_name: `Usuario ${userId.substring(0, 8)}`,
+        avatar_url: null,
+      }) : {
+        email: null,
+        display_name: `Miembro ${p.member_id.substring(0, 8)}`,
+        avatar_url: null,
+      };
+
+      return {
+        id: p.id,
+        folder_id: p.folder_id,
+        member_id: p.member_id,
+        access: p.access as FolderAccess,
+        user_id: userId || '',
+        email: userInfo.email,
+        display_name: userInfo.display_name,
+        avatar_url: userInfo.avatar_url,
+      };
+    });
+
+    return result;
+  } catch (error) {
+    console.error("[Folders] Error inesperado obteniendo participantes:", error);
     return [];
   }
 }

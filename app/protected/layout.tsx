@@ -1,5 +1,6 @@
 import { EnvVarWarning } from "@/components/env-var-warning";
 import { UserInfo } from "@/components/user-info";
+import { WorkspaceName } from "@/components/workspace-name";
 import { Sidebar } from "@/components/sidebar";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { SidebarToggle } from "@/components/sidebar-toggle";
@@ -42,17 +43,28 @@ export default function ProtectedLayout({
           <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden relative">
             <nav className="w-full border-b border-border h-16 bg-background shrink-0">
               <div className="w-full h-full flex justify-between items-center px-4 md:px-5 gap-4">
-                {/* Lado izquierdo - Botón hamburguesa y toggle de actividades */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Lado izquierdo - Botón hamburguesa, toggle de actividades y Workspace */}
+                <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
                   <SidebarToggle />
                   <ActivitiesToggle />
-            </div>
+                  
+                  {/* Workspace */}
+                  <div className="hidden md:block">
+                    <Suspense
+                      fallback={
+                        <div className="h-8 w-32 bg-muted animate-pulse rounded-lg" />
+                      }
+                    >
+                      <WorkspaceName />
+                    </Suspense>
+                  </div>
+                </div>
 
                 {/* Lado derecho - Información del usuario */}
                 <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
+                  {!hasEnvVars ? (
+                    <EnvVarWarning />
+                  ) : (
                     <Suspense
                       fallback={
                         <div className="flex items-center gap-2 md:gap-4">
@@ -62,11 +74,11 @@ export default function ProtectedLayout({
                       }
                     >
                       <UserInfo />
-              </Suspense>
-            )}
+                    </Suspense>
+                  )}
                 </div>
-          </div>
-        </nav>
+              </div>
+            </nav>
             <div className="flex-1 flex overflow-x-hidden relative">
               <ActivitiesPanel />
               <ActivitiesContentWrapper>

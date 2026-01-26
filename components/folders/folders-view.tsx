@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { type FolderTreeItem } from "@/lib/supabase/folders";
 import { FolderTree } from "./folder-tree";
 import { FolderDetails } from "./folder-details";
@@ -14,13 +14,21 @@ export function FoldersView({ initialTree, workspaceId }: FoldersViewProps) {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [tree, setTree] = useState<FolderTreeItem[]>(initialTree);
 
+  // Sincronizar el estado cuando cambia initialTree (por ejemplo, cuando cambia el usuario)
+  useEffect(() => {
+    setTree(initialTree);
+    setSelectedFolderId(null); // También limpiar la selección cuando cambia el árbol
+  }, [initialTree]);
+
   const handleFolderSelect = (folderId: string | null) => {
     setSelectedFolderId(folderId);
   };
 
   const handleTreeRefresh = async () => {
     try {
-      const response = await fetch(`/api/folders/tree?workspace_id=${workspaceId}`);
+      const response = await fetch(`/api/folders/tree?workspace_id=${workspaceId}`, {
+        cache: 'no-store', // Evitar caché
+      });
       if (response.ok) {
         const data = await response.json();
         setTree(data.tree || []);
@@ -50,6 +58,7 @@ export function FoldersView({ initialTree, workspaceId }: FoldersViewProps) {
             <FolderDetails
               folderId={selectedFolderId}
               workspaceId={workspaceId}
+              tree={tree}
               onRefresh={handleTreeRefresh}
             />
           ) : (

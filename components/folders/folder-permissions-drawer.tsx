@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
@@ -13,16 +13,22 @@ import {
 } from "../ui/dialog";
 import { Badge } from "../ui/badge";
 // Avatar component inline
-import { X, Users, Search } from "lucide-react";
-import { type FolderPermissionsWithMember } from "@/lib/supabase/folders";
+import { X, Users, Search, Plus } from "lucide-react";
+import { type FolderPermissionsWithMember, type FolderTreeItem } from "@/lib/supabase/folders";
 import { createClient } from "@/lib/supabase/client";
 import { type WorkspaceUser } from "@/lib/supabase/users";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 interface FolderPermissionsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   folderId: string;
   workspaceId: string;
+  tree?: FolderTreeItem[]; // Pasar el árbol para evitar fetch redundante
   onSuccess?: () => void;
 }
 
@@ -31,6 +37,7 @@ export function FolderPermissionsDrawer({
   onOpenChange,
   folderId,
   workspaceId,
+  tree,
   onSuccess,
 }: FolderPermissionsDrawerProps) {
   const [permissions, setPermissions] = useState<{
@@ -45,16 +52,58 @@ export function FolderPermissionsDrawer({
   const [availableUsers, setAvailableUsers] = useState<WorkspaceUser[]>([]);
   const [showUserPicker, setShowUserPicker] = useState<"OWNER" | "EDIT" | "READ" | null>(null);
   const [currentUserMemberId, setCurrentUserMemberId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<Array<{ id: string; name: string }>>([]);
 
-  useEffect(() => {
-    if (open) {
-      loadPermissions();
-      loadAvailableUsers();
-      loadCurrentUserMemberId();
+  // Memoizar el cálculo de la ruta de la carpeta desde el árbol
+  const computedFolderPath = useMemo(() => {
+    if (!tree || tree.length === 0) return [];
+
+    // Construir mapa de carpetas
+    const folderMap = new Map<string, FolderTreeItem>();
+    const buildFolderMap = (items: FolderTreeItem[]) => {
+      items.forEach(item => {
+        folderMap.set(item.id, item);
+        if (item.children) {
+          buildFolderMap(item.children);
+        }
+      });
+    };
+    buildFolderMap(tree);
+
+    // Encontrar la carpeta
+    const findFolder = (items: FolderTreeItem[]): FolderTreeItem | null => {
+      for (const item of items) {
+        if (item.id === folderId) return item;
+        if (item.children) {
+          const found = findFolder(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const found = findFolder(tree);
+    if (!found) return [];
+
+    // Construir ruta jerárquica desde el path
+    const pathIds = found.path.split('.');
+    const pathItems: Array<{ id: string; name: string }> = [];
+    
+    for (const pathId of pathIds) {
+      const pathFolder = folderMap.get(pathId);
+      if (pathFolder) {
+        pathItems.push({
+          id: pathFolder.id,
+          name: pathFolder.name,
+        });
+      }
     }
-  }, [open, folderId]);
+    
+    return pathItems;
+  }, [tree, folderId]);
 
-  const loadCurrentUserMemberId = async () => {
+  // Definir funciones de carga antes del useEffect que las usa
+  const loadCurrentUserMemberId = useCallback(async () => {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -71,24 +120,23 @@ export function FolderPermissionsDrawer({
     } catch (err) {
       console.error("[FolderPermissions] Error cargando member_id del usuario:", err);
     }
-  };
+  }, [workspaceId]);
 
-  const loadPermissions = async () => {
-    setIsLoading(true);
+  const loadPermissions = useCallback(async () => {
     try {
-      const response = await fetch(`/api/folders/permissions?folder_id=${folderId}`);
+      const response = await fetch(`/api/folders/permissions?folder_id=${folderId}`, {
+        cache: 'no-store',
+      });
       if (response.ok) {
         const data = await response.json();
         setPermissions(data.permissions || { OWNER: [], EDIT: [], READ: [] });
       }
     } catch (err) {
       console.error("[FolderPermissions] Error cargando permisos:", err);
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [folderId]);
 
-  const loadAvailableUsers = async () => {
+  const loadAvailableUsers = useCallback(async () => {
     try {
       const supabase = createClient();
       const { data: usersData, error } = await supabase.rpc('get_workspace_users', {
@@ -125,20 +173,105 @@ export function FolderPermissionsDrawer({
     } catch (err) {
       console.error("[FolderPermissions] Error cargando usuarios:", err);
     }
-  };
+  }, [workspaceId]);
 
-  const getMemberIds = () => {
-    return [
+  const loadFolderPath = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/folders/tree?workspace_id=${workspaceId}`, {
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Construir mapa de carpetas
+        const folderMap = new Map<string, any>();
+        const buildFolderMap = (items: any[]) => {
+          items.forEach(item => {
+            folderMap.set(item.id, item);
+            if (item.children) {
+              buildFolderMap(item.children);
+            }
+          });
+        };
+        buildFolderMap(data.tree || []);
+        
+        // Encontrar la carpeta
+        const findFolder = (items: any[]): any => {
+          for (const item of items) {
+            if (item.id === folderId) return item;
+            if (item.children) {
+              const found = findFolder(item.children);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        
+        const found = findFolder(data.tree || []);
+        if (found) {
+          // Construir ruta jerárquica desde el path
+          const pathIds = found.path.split('.');
+          const pathItems: Array<{ id: string; name: string }> = [];
+          
+          for (const pathId of pathIds) {
+            const pathFolder = folderMap.get(pathId);
+            if (pathFolder) {
+              pathItems.push({
+                id: pathFolder.id,
+                name: pathFolder.name,
+              });
+            }
+          }
+          
+          setFolderPath(pathItems);
+        }
+      }
+    } catch (err) {
+      console.error("[FolderPermissions] Error cargando ruta de carpeta:", err);
+    }
+  }, [workspaceId, folderId]);
+
+  // useEffect para cargar datos cuando se abre el drawer
+  useEffect(() => {
+    if (!open) {
+      // Limpiar estado al cerrar
+      setSearchQuery("");
+      setShowUserPicker(null);
+      setError(null);
+      return;
+    }
+
+    // Verificar que las funciones estén definidas antes de usarlas
+    if (!loadPermissions || !loadAvailableUsers || !loadCurrentUserMemberId || !loadFolderPath) {
+      return;
+    }
+
+    // Ejecutar todas las cargas en paralelo para mejorar rendimiento
+    setIsLoading(true);
+    Promise.all([
+      loadPermissions(),
+      loadAvailableUsers(),
+      loadCurrentUserMemberId(),
+      // Solo cargar path si no tenemos el árbol
+      tree && tree.length > 0 ? Promise.resolve() : loadFolderPath(),
+    ]).finally(() => {
+      setIsLoading(false);
+    });
+  }, [open, folderId, workspaceId, tree, loadPermissions, loadAvailableUsers, loadCurrentUserMemberId, loadFolderPath]);
+
+  // Memoizar los member IDs para evitar recalcular
+  const memberIds = useMemo(() => {
+    return new Set([
       ...permissions.OWNER.map(p => p.member_id),
       ...permissions.EDIT.map(p => p.member_id),
       ...permissions.READ.map(p => p.member_id),
-    ];
-  };
+    ]);
+  }, [permissions]);
 
-  const getAvailableUsersForPicker = () => {
-    const assignedMemberIds = getMemberIds();
-    return availableUsers.filter(u => !assignedMemberIds.includes(u.id));
-  };
+  // Memoizar usuarios disponibles para el picker
+  const availableUsersForPicker = useMemo(() => {
+    return availableUsers.filter(u => !memberIds.has(u.id));
+  }, [availableUsers, memberIds]);
 
   const handleAddUser = (user: WorkspaceUser, access: "OWNER" | "EDIT" | "READ") => {
     setError(null); // Limpiar error al agregar usuario
@@ -272,15 +405,22 @@ export function FolderPermissionsDrawer({
     }
   };
 
-  const filteredUsers = getAvailableUsersForPicker().filter(u => {
+  // Memoizar usuarios filtrados por búsqueda
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return availableUsersForPicker;
+    }
+    
     const query = searchQuery.toLowerCase();
-    return (
-      u.email?.toLowerCase().includes(query) ||
-      u.display_name?.toLowerCase().includes(query) ||
-      u.first_name?.toLowerCase().includes(query) ||
-      u.last_name?.toLowerCase().includes(query)
-    );
-  });
+    return availableUsersForPicker.filter(u => {
+      return (
+        u.email?.toLowerCase().includes(query) ||
+        u.display_name?.toLowerCase().includes(query) ||
+        u.first_name?.toLowerCase().includes(query) ||
+        u.last_name?.toLowerCase().includes(query)
+      );
+    });
+  }, [availableUsersForPicker, searchQuery]);
 
   const renderPermissionSection = (
     title: string,
@@ -300,102 +440,110 @@ export function FolderPermissionsDrawer({
       <div className={`border rounded-lg p-4 ${colors[access]}`}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">{title}</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowUserPicker(showUserPicker === access ? null : access)}
+          <DropdownMenu 
+            open={showUserPicker === access} 
+            onOpenChange={(isOpen) => {
+              if (isOpen) {
+                setSearchQuery("");
+                setShowUserPicker(access);
+              } else {
+                setShowUserPicker(null);
+              }
+            }}
           >
-            <Users className="h-4 w-4 mr-1" />
-            Agregar
-          </Button>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                <span className="text-xs">Agregar</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-80 p-0" align="end">
+              <div className="p-3">
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar usuario..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {filteredUsers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      {searchQuery ? "No se encontraron usuarios" : "No hay usuarios disponibles"}
+                    </p>
+                  ) : (
+                    filteredUsers.map((user, index) => (
+                      <button
+                        key={`${access}-user-${user.id || user.user_id || index}`}
+                        onClick={() => handleAddUser(user, access)}
+                        className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent text-left transition-colors"
+                      >
+                        {user.avatar_url ? (
+                          <img
+                            src={user.avatar_url}
+                            alt={user.display_name || 'Usuario'}
+                            className="h-6 w-6 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-primary">
+                              {(user.display_name || user.email || 'U').charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-sm flex-1 truncate">
+                          {user.display_name || user.email}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        {showUserPicker === access && (
-          <div className="mb-3 p-3 bg-background rounded border">
-            <div className="relative mb-2">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar usuario..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <div className="max-h-32 overflow-y-auto space-y-1">
-              {filteredUsers.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  {searchQuery ? "No se encontraron usuarios" : "No hay usuarios disponibles"}
-                </p>
-              ) : (
-                filteredUsers.map((user, index) => (
-                  <button
-                    key={`${access}-user-${user.id || user.user_id || index}`}
-                    onClick={() => handleAddUser(user, access)}
-                    className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent text-left"
-                  >
-                    {user.avatar_url ? (
-                      <img
-                        src={user.avatar_url}
-                        alt={user.display_name || 'Usuario'}
-                        className="h-6 w-6 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-xs font-semibold text-primary">
-                          {(user.display_name || user.email || 'U').charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                    <span className="text-sm flex-1 truncate">
-                      {user.display_name || user.email}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-wrap gap-2">
-          {members.length === 0 ? (
-            <p className="text-sm text-muted-foreground w-full text-center py-2">
-              No hay miembros asignados
-            </p>
-          ) : (
-            members.map((permission, index) => (
-              <div
-                key={`${access}-permission-${permission.member_id}-${permission.id || index}`}
-                className="flex items-center gap-2 p-1 pr-2 bg-background rounded-full border shadow-sm group hover:border-primary/50 transition-colors"
-              >
-                {permission.avatar_url ? (
-                  <img
-                    src={permission.avatar_url}
-                    alt={permission.display_name || 'Usuario'}
-                    className="h-6 w-6 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-[10px] font-semibold text-primary">
-                      {(permission.display_name || permission.email || 'U').charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-                
-                <span className="text-xs font-medium max-w-[150px] truncate" title={permission.email || ''}>
-                  {permission.display_name || permission.email}
-                </span>
+          {members.map((permission, index) => (
+            <div
+              key={`${access}-permission-${permission.member_id}-${permission.id || index}`}
+              className="flex items-center gap-2 p-1 pr-2 bg-background rounded-full border shadow-sm group hover:border-primary/50 transition-colors"
+            >
+              {permission.avatar_url ? (
+                <img
+                  src={permission.avatar_url}
+                  alt={permission.display_name || 'Usuario'}
+                  className="h-6 w-6 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-[10px] font-semibold text-primary">
+                    {(permission.display_name || permission.email || 'U').charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              
+              <span className="text-xs font-medium max-w-[150px] truncate" title={permission.email || ''}>
+                {permission.display_name || permission.email}
+              </span>
 
-                <button
-                  onClick={() => handleRemoveUser(permission.member_id, permission.access)}
-                  disabled={isLastOwner && permission.access === 'OWNER'}
-                  className="ml-1 h-4 w-4 flex items-center justify-center rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isLastOwner && permission.access === 'OWNER' ? "Debe existir al menos un propietario. Agrega otro propietario primero." : "Eliminar usuario"}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))
-          )}
+              <button
+                onClick={() => handleRemoveUser(permission.member_id, permission.access)}
+                disabled={isLastOwner && permission.access === 'OWNER'}
+                className="ml-1 h-4 w-4 flex items-center justify-center rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isLastOwner && permission.access === 'OWNER' ? "Debe existir al menos un propietario. Agrega otro propietario primero." : "Eliminar usuario"}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -409,6 +557,21 @@ export function FolderPermissionsDrawer({
           <DialogDescription>
             Gestiona los permisos de acceso a esta carpeta. Los cambios se aplicarán también a las subcarpetas.
           </DialogDescription>
+          {folderPath.length > 0 && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-bold text-foreground">Ruta:</span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {folderPath.map((item, index) => (
+                  <span key={item.id} className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-foreground">{item.name}</span>
+                    {index < folderPath.length - 1 && (
+                      <span className="text-muted-foreground font-bold">/</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </DialogHeader>
 
         {isLoading ? (

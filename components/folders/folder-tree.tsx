@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { type FolderTreeItem, type FolderAccess } from "@/lib/supabase/folders";
+import { useState, useEffect } from "react";
+import { type FolderTreeItem } from "@/lib/supabase/folders";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { 
@@ -39,6 +39,8 @@ interface FolderTreeNodeProps {
   selectedFolderId: string | null;
   onSelect: (folderId: string) => void;
   onTreeChange: (tree: FolderTreeItem[]) => void;
+  workspaceId: string;
+  tree: FolderTreeItem[]; // Árbol completo para pasar al drawer
   level?: number;
 }
 
@@ -48,6 +50,7 @@ function FolderTreeNode({
   onSelect,
   onTreeChange,
   workspaceId,
+  tree,
   level = 0 
 }: FolderTreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(level === 0); // Expandir raíz por defecto
@@ -59,20 +62,6 @@ function FolderTreeNode({
   const hasChildren = folder.children && folder.children.length > 0;
   const isSelected = selectedFolderId === folder.id;
   const access = folder.access;
-
-  const getAccessIcon = (access: FolderAccess | null) => {
-    if (!access) return null;
-    const colors = {
-      OWNER: "text-yellow-500",
-      EDIT: "text-blue-500",
-      READ: "text-gray-500",
-    };
-    return (
-      <span className={cn("text-xs font-medium", colors[access])}>
-        {access}
-      </span>
-    );
-  };
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -173,8 +162,6 @@ function FolderTreeNode({
 
         <span className="flex-1 text-sm truncate">{folder.name}</span>
 
-        {getAccessIcon(access)}
-
         {access === 'OWNER' && (
           <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
@@ -228,6 +215,7 @@ function FolderTreeNode({
               onSelect={onSelect}
               onTreeChange={onTreeChange}
               workspaceId={workspaceId}
+              tree={tree}
               level={level + 1}
             />
           ))}
@@ -269,6 +257,7 @@ function FolderTreeNode({
         onOpenChange={setIsPermissionsDrawerOpen}
         folderId={folder.id}
         workspaceId={folder.workspace_id}
+        tree={tree}
         onSuccess={() => {
           // Refrescar árbol para actualizar iconos de acceso si cambiaron
           fetch(`/api/folders/tree?workspace_id=${folder.workspace_id}`)
@@ -332,6 +321,33 @@ export function FolderTree({
   workspaceId
 }: FolderTreeProps) {
   const [isCreateRootDialogOpen, setIsCreateRootDialogOpen] = useState(false);
+  const [isWorkspaceOwner, setIsWorkspaceOwner] = useState(false);
+
+  // Verificar si el usuario es OWNER del workspace
+  useEffect(() => {
+    async function checkWorkspaceRole() {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: membership } = await supabase
+            .from('workspace_members')
+            .select('role')
+            .eq('user_id', user.id)
+            .eq('workspace_id', workspaceId)
+            .eq('status', 'ACTIVE')
+            .maybeSingle();
+          
+          setIsWorkspaceOwner(membership?.role === 'OWNER');
+        }
+      } catch (error) {
+        console.error("[FolderTree] Error verificando rol:", error);
+        setIsWorkspaceOwner(false);
+      }
+    }
+    checkWorkspaceRole();
+  }, [workspaceId]);
 
   // Función helper para encontrar una carpeta en el árbol
   const findFolderInTree = (tree: FolderTreeItem[], folderId: string): FolderTreeItem | null => {
@@ -356,14 +372,16 @@ export function FolderTree({
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Carpetas</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsCreateRootDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Nueva carpeta
-        </Button>
+        {isWorkspaceOwner && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCreateRootDialogOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Nueva carpeta
+          </Button>
+        )}
       </div>
 
       <div 
@@ -380,16 +398,17 @@ export function FolderTree({
           </div>
         ) : (
           <div className="space-y-1">
-          {initialTree.map((folder) => (
-            <FolderTreeNode
-              key={folder.id}
-              folder={folder}
-              selectedFolderId={selectedFolderId}
-              onSelect={onFolderSelect}
-              onTreeChange={onTreeChange}
-              workspaceId={workspaceId}
-            />
-          ))}
+                    {initialTree.map((folder) => (
+                      <FolderTreeNode
+                        key={folder.id}
+                        folder={folder}
+                        selectedFolderId={selectedFolderId}
+                        onSelect={onFolderSelect}
+                        onTreeChange={onTreeChange}
+                        workspaceId={workspaceId}
+                        tree={initialTree}
+                      />
+                    ))}
           </div>
         )}
       </div>
