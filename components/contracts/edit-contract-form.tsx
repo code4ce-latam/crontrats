@@ -12,7 +12,8 @@ import { UploadVersionDialog } from "./upload-version-dialog";
 import { UploadAttachmentDialog } from "./upload-attachment-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { getFolderAccess } from "@/lib/supabase/folders";
-import { FileText, Download, Upload, Trash2 } from "lucide-react";
+import { FileText, Download, Upload, Trash2, Eye, PenTool } from "lucide-react";
+import { PdfReviewModal } from "../pdf-review/pdf-review-modal";
 
 interface EditContractFormProps {
   contractId: string;
@@ -59,11 +60,34 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
   const [refreshKey, setRefreshKey] = useState(0);
   const [basicInfoUpdated, setBasicInfoUpdated] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [pdfReviewOpen, setPdfReviewOpen] = useState(false);
+  const [pdfReviewMode, setPdfReviewMode] = useState<'view' | 'annotate'>('view');
+  const [selectedFileVersion, setSelectedFileVersion] = useState<{ id: string; storage_path: string } | null>(null);
+  const [access, setAccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
     loadFieldValues();
+    loadAccess();
   }, []);
+
+  useEffect(() => {
+    if (folderId) {
+      loadAccess();
+    }
+  }, [folderId]);
+
+  const loadAccess = async () => {
+    try {
+      const supabase = createClient();
+      if (folderId) {
+        const folderAccess = await getFolderAccess(supabase, folderId);
+        setAccess(folderAccess);
+      }
+    } catch (error) {
+      console.error("[EditContractForm] Error cargando acceso:", error);
+    }
+  };
 
   useEffect(() => {
     if (refreshKey > 0) {
@@ -196,6 +220,12 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
     } catch (error) {
       console.error("[EditContractForm] Error cargando archivos:", error);
     }
+  };
+
+  const handleOpenViewer = (version: any, mode: 'view' | 'annotate') => {
+    setSelectedFileVersion({ id: version.id, storage_path: version.storage_path });
+    setPdfReviewMode(mode);
+    setPdfReviewOpen(true);
   };
 
   const handleDownloadVersion = async (version: any) => {
@@ -627,15 +657,40 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
                         </p>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDownloadVersion(version)}
-                      className="flex-shrink-0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenViewer(version, 'view')}
+                        className="h-8 px-2"
+                        title="Abrir documento"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {(access === 'EDIT' || access === 'OWNER') && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenViewer(version, 'annotate')}
+                          className="h-8 px-2"
+                          title="Anotar documento"
+                        >
+                          <PenTool className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownloadVersion(version)}
+                        className="h-8 px-2"
+                        title="Descargar"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -773,6 +828,16 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
           setRefreshKey(prev => prev + 1);
         }}
       />
+      {selectedFileVersion && (
+        <PdfReviewModal
+          open={pdfReviewOpen}
+          onOpenChange={setPdfReviewOpen}
+          fileVersionId={selectedFileVersion.id}
+          storagePath={selectedFileVersion.storage_path}
+          mode={pdfReviewMode}
+          access={access || 'READ'}
+        />
+      )}
     </form>
   );
 }

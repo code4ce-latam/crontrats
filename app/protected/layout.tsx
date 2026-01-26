@@ -82,7 +82,17 @@ export default function ProtectedLayout({
                 </div>
               </div>
             </nav>
-            <Breadcrumbs />
+            <Suspense
+              fallback={
+                <div className="w-full border-b border-border bg-background/95 h-10">
+                  <div className="flex h-10 items-center gap-2 px-4 md:px-5">
+                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              }
+            >
+              <Breadcrumbs />
+            </Suspense>
             <div className="flex-1 flex overflow-x-hidden relative">
               <ActivitiesPanel />
               <ActivitiesContentWrapper>

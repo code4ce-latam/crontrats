@@ -15,7 +15,10 @@ export type ActivityType =
   | 'CONTRACT_UPDATED'
   | 'CONTRACT_STATUS_CHANGED'
   | 'CONTRACT_MAIN_VERSION_UPLOADED'
-  | 'CONTRACT_ATTACHMENT_UPLOADED';
+  | 'CONTRACT_ATTACHMENT_UPLOADED'
+  | 'ANNOTATION_DRAFT_SAVED'
+  | 'ANNOTATION_PUBLISHED'
+  | 'ANNOTATION_DELETED';
 
 export type EntityType = 
   | 'contract' 
@@ -28,7 +31,8 @@ export type EntityType =
   | 'workspace_member'
   | 'workspace_invite'
   | 'contract_profile'
-  | 'contract_profile_field';
+  | 'contract_profile_field'
+  | 'contract_file_version';
 
 export interface Activity {
   id: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Home } from "lucide-react";
@@ -10,13 +11,20 @@ import { cn } from "@/lib/utils";
 export function Breadcrumbs() {
   const pathname = usePathname();
   const { dynamicData } = useBreadcrumbs();
+  const [mounted, setMounted] = useState(false);
+
+  // Evitar error de hidratación esperando a que el componente se monte
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // No mostrar breadcrumbs si no es necesario
   if (!shouldShowBreadcrumb(pathname)) {
     return null;
   }
 
-  const breadcrumbs = generateBreadcrumbs(pathname, dynamicData);
+  // Durante el SSR, usar datos estáticos para evitar error de hidratación
+  const breadcrumbs = generateBreadcrumbs(pathname, mounted ? dynamicData : undefined);
 
   // Si solo hay un breadcrumb (Inicio), no mostrar
   if (breadcrumbs.length <= 1) {

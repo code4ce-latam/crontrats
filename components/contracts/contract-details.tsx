@@ -15,11 +15,14 @@ import {
   Folder,
   Calendar,
   Tag,
+  Eye,
+  PenTool,
 } from "lucide-react";
 import { getStatusLabel, getStatusBadgeVariant, formatContractValue } from "@/lib/contracts-utils";
 import { ContractProfileFields } from "./contract-profile-fields";
 import { UploadVersionDialog } from "./upload-version-dialog";
 import { UploadAttachmentDialog } from "./upload-attachment-dialog";
+import { PdfReviewModal } from "../pdf-review/pdf-review-modal";
 import { getFolderAccess } from "@/lib/supabase/folders";
 import { createClient } from "@/lib/supabase/client";
 
@@ -35,6 +38,9 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
   const [isUploadVersionOpen, setIsUploadVersionOpen] = useState(false);
   const [isUploadAttachmentOpen, setIsUploadAttachmentOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pdfReviewOpen, setPdfReviewOpen] = useState(false);
+  const [pdfReviewMode, setPdfReviewMode] = useState<'view' | 'annotate'>('view');
+  const [selectedFileVersion, setSelectedFileVersion] = useState<{ id: string; storage_path: string } | null>(null);
 
   useEffect(() => {
     loadAccess();
@@ -99,6 +105,12 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
     } catch (error) {
       console.error("[ContractDetails] Error eliminando archivo:", error);
     }
+  };
+
+  const handleOpenViewer = (version: any, mode: 'view' | 'annotate') => {
+    setSelectedFileVersion({ id: version.id, storage_path: version.storage_path });
+    setPdfReviewMode(mode);
+    setPdfReviewOpen(true);
   };
 
   const canEdit = access === 'EDIT' || access === 'OWNER';
@@ -314,7 +326,7 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                 {contract.file_versions.map((version: any) => (
                   <div
                     key={version.id}
-                    className="flex items-center justify-between p-3 border border-border rounded-md"
+                    className="flex items-center justify-between p-3 border border-border rounded-md hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -333,14 +345,37 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDownloadVersion(version)}
-                      className="flex-shrink-0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenViewer(version, 'view')}
+                        className="h-8 px-2"
+                        title="Abrir documento"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {(access === 'EDIT' || access === 'OWNER') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenViewer(version, 'annotate')}
+                          className="h-8 px-2"
+                          title="Anotar documento"
+                        >
+                          <PenTool className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownloadVersion(version)}
+                        className="h-8 px-2"
+                        title="Descargar"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -465,6 +500,16 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
           router.refresh();
         }}
       />
+      {selectedFileVersion && (
+        <PdfReviewModal
+          open={pdfReviewOpen}
+          onOpenChange={setPdfReviewOpen}
+          fileVersionId={selectedFileVersion.id}
+          storagePath={selectedFileVersion.storage_path}
+          mode={pdfReviewMode}
+          access={access || 'READ'}
+        />
+      )}
     </div>
   );
 }
