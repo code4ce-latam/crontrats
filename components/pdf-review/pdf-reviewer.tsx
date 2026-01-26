@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AnnotationOverlay } from "./annotation-overlay";
 import { AnnotationToolbar, type ToolType } from "./annotation-toolbar";
 import { AnnotationSidebar } from "./annotation-sidebar";
@@ -48,11 +49,15 @@ export function PdfReviewer({
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+  const [currentPath, setCurrentPath] = useState<{ x: number; y: number }[]>([]);
+  const [currentMousePos, setCurrentMousePos] = useState<{ x: number; y: number } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentColor, setCurrentColor] = useState('#000000');
+  const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
   
   const pageRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
   // Obtener user_id del usuario actual
@@ -200,7 +205,9 @@ export function PdfReviewer({
 
     if (selectedTool === 'highlight') {
       setIsDrawing(true);
-      setDrawStart({ x, y });
+      const startPoint = { x, y };
+      setDrawStart(startPoint);
+      setCurrentPath([startPoint]);
     } else if (selectedTool === 'text' || selectedTool === 'comment') {
       // Crear anotación inmediatamente para text/comment
       const width = selectedTool === 'text' ? 200 : 150;
@@ -212,7 +219,7 @@ export function PdfReviewer({
         type: selectedTool === 'text' ? 'TEXT' : 'COMMENT',
         rect: normalized,
         text: '',
-        color: selectedTool === 'text' ? '#000' : '#FF5722',
+        color: selectedTool === 'text' ? currentColor : '#FF5722',
         opacity: selectedTool === 'text' ? 1 : 0.9,
         createdAt: new Date().toISOString(),
         createdByUserId: currentUserId,
@@ -228,43 +235,64 @@ export function PdfReviewer({
   }, [mode, selectedTool, scale, pageWidth, pageHeight, currentPage, currentUserId]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDrawing || !drawStart || !pageRef.current) return;
-    // Aquí se podría mostrar un preview del rectángulo
-  }, [isDrawing, drawStart]);
+    if (!isDrawing || !pageRef.current) return;
+    
+    const rect = pageRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+
+    if (selectedTool === 'highlight') {
+      setCurrentPath(prev => [...prev, { x, y }]);
+    } else {
+      // Para otras herramientas que usen drawStart pero no path (si las hubiera)
+      setCurrentMousePos({ x, y });
+    }
+  }, [isDrawing, selectedTool, scale]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDrawing || !drawStart || !pageRef.current) return;
+    if (!isDrawing || !pageRef.current) return;
 
-    const rect = pageRef.current.getBoundingClientRect();
-    const endX = (e.clientX - rect.left) / scale;
-    const endY = (e.clientY - rect.top) / scale;
+    if (selectedTool === 'highlight' && currentPath.length > 1) {
+      // Calcular bounding box para el rect (usado para clics/interacción básica)
+      const xs = currentPath.map(p => p.x);
+      const ys = currentPath.map(p => p.y);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      const maxX = Math.max(...xs);
+      const maxY = Math.max(...ys);
+      
+      const width = maxX - minX;
+      const height = maxY - minY;
 
-    const x = Math.min(drawStart.x, endX);
-    const y = Math.min(drawStart.y, endY);
-    const w = Math.abs(endX - drawStart.x);
-    const h = Math.abs(endY - drawStart.y);
+      // Normalizar puntos y rect
+      const normalizedRect = pixelsToNormalized(minX, minY, width, height, pageWidth, pageHeight);
+      
+      const normalizedPoints = currentPath.map(p => ({
+        x: p.x / pageWidth,
+        y: p.y / pageHeight
+      }));
 
-    if (w > 5 && h > 5) {
-      const normalized = pixelsToNormalized(x, y, w, h, pageWidth, pageHeight);
-      if (validateNormalizedRect(normalized)) {
-        const newAnnotation: Annotation = {
-          id: nanoid(),
-          page: currentPage,
-          type: 'HIGHLIGHT',
-          rect: normalized,
-          color: '#FFEB3B',
-          opacity: 0.3,
-          createdAt: new Date().toISOString(),
-          createdByUserId: '',
-        };
-        setDraftAnnotations(prev => [...prev, newAnnotation]);
-        setHasUnsavedChanges(true);
-      }
+      const newAnnotation: Annotation = {
+        id: nanoid(),
+        page: currentPage,
+        type: 'HIGHLIGHT',
+        rect: normalizedRect,
+        points: normalizedPoints,
+        strokeWidth: 20 / Math.max(pageWidth, pageHeight), // Grosor relativo
+        color: '#FFEB3B',
+        opacity: 0.5,
+        createdAt: new Date().toISOString(),
+        createdByUserId: '',
+      };
+      setDraftAnnotations(prev => [...prev, newAnnotation]);
+      setHasUnsavedChanges(true);
     }
 
     setIsDrawing(false);
     setDrawStart(null);
-  }, [isDrawing, drawStart, scale, pageWidth, pageHeight, currentPage]);
+    setCurrentPath([]);
+    setCurrentMousePos(null);
+  }, [isDrawing, currentPath, selectedTool, scale, pageWidth, pageHeight, currentPage]);
 
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -329,14 +357,21 @@ export function PdfReviewer({
 
   const handleClose = () => {
     if (hasUnsavedChanges) {
-      if (confirm("Tienes cambios sin guardar. ¿Guardar borrador o salir?")) {
-        handleSaveDraft().then(() => onClose());
-      } else {
-        onClose();
-      }
+      setShowUnsavedChangesDialog(true);
     } else {
       onClose();
     }
+  };
+
+  const handleSaveAndClose = async () => {
+    setShowUnsavedChangesDialog(false);
+    await handleSaveDraft();
+    onClose();
+  };
+
+  const handleCloseWithoutSaving = () => {
+    setShowUnsavedChangesDialog(false);
+    onClose();
   };
 
   const handleToolChange = (tool: ToolType) => {
@@ -346,6 +381,16 @@ export function PdfReviewer({
       setScale(prev => Math.max(prev - 0.1, 0.5));
     } else {
       setSelectedTool(tool);
+    }
+  };
+
+  const handleColorChange = (color: string) => {
+    setCurrentColor(color);
+    if (selectedAnnotationId) {
+      setDraftAnnotations(prev => 
+        prev.map(ann => ann.id === selectedAnnotationId ? { ...ann, color } : ann)
+      );
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -375,6 +420,8 @@ export function PdfReviewer({
         hasSelectedAnnotation={!!selectedAnnotationId}
         isSaving={isSaving}
         mode={mode}
+        currentColor={currentColor}
+        onColorChange={handleColorChange}
       />
       
       <div className="flex flex-1 overflow-hidden">
@@ -389,12 +436,41 @@ export function PdfReviewer({
               <div
                 ref={pageRef}
                 data-pdf-container
-                className="relative"
-                style={{ cursor: getCursorStyle() }}
+                className="relative mx-auto shadow-md"
+                style={{ 
+                  width: pageWidth * scale, 
+                  height: pageHeight * scale,
+                  cursor: getCursorStyle() 
+                }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
               >
+                {/* Preview del resaltado (Dibujo libre) */}
+                {isDrawing && selectedTool === 'highlight' && currentPath.length > 1 && (
+                  <svg
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none',
+                      zIndex: 50,
+                    }}
+                  >
+                    <polyline
+                      points={currentPath.map(p => `${p.x * scale},${p.y * scale}`).join(' ')}
+                      fill="none"
+                      stroke="#FFEB3B"
+                      strokeWidth={20 * scale}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.5}
+                    />
+                  </svg>
+                )}
+                
                 <Document
                   file={pdfUrl}
                   onLoadSuccess={handleDocumentLoadSuccess}
@@ -483,6 +559,33 @@ export function PdfReviewer({
           currentUserId={currentUserId}
         />
       </div>
+      
+      {/* Diálogo de confirmación para cambios sin guardar */}
+      <Dialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Guardar cambios?</DialogTitle>
+            <DialogDescription>
+              Tienes cambios sin guardar. ¿Deseas guardar el borrador antes de salir?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleCloseWithoutSaving}
+              disabled={isSaving}
+            >
+              Salir sin guardar
+            </Button>
+            <Button
+              onClick={handleSaveAndClose}
+              disabled={isSaving}
+            >
+              {isSaving ? "Guardando..." : "Guardar borrador"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -19,6 +19,8 @@ export interface Annotation {
   text?: string; // para TEXT y COMMENT
   color?: string; // hex color (ej: "#FFEB3B")
   opacity?: number; // 0..1 (default: 0.3 para highlight, 1.0 para text/comment)
+  points?: { x: number; y: number }[]; // Array de puntos normalizados para dibujo libre
+  strokeWidth?: number; // Ancho del trazo para dibujo libre
   createdAt: string; // ISO timestamp
   createdByUserId: string;
 }

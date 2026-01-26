@@ -68,7 +68,9 @@ export function AnnotationOverlay({
   };
 
   const handleTextKeyDown = (e: React.KeyboardEvent, annotation: Annotation) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Permitir Enter normal para nueva línea.
+    // Usar Ctrl + Enter para guardar y salir.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleTextBlur(annotation);
     } else if (e.key === 'Escape') {
@@ -135,7 +137,51 @@ export function AnnotationOverlay({
           );
         }
 
-        // HIGHLIGHT se renderiza sin drag (por ahora)
+        // HIGHLIGHT
+        // Si tiene points, es dibujo libre
+        if (annotation.points && annotation.points.length > 0) {
+          const pointsString = annotation.points
+            .map(p => `${p.x * pageWidth},${p.y * pageHeight}`)
+            .join(' ');
+            
+          return (
+            <svg
+              key={annotation.id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none', // Permitir clic a través del SVG
+                zIndex: isSelected ? 10 : 1,
+              }}
+            >
+              <polyline
+                points={pointsString}
+                fill="none"
+                stroke={annotation.color || '#FFEB3B'}
+                strokeWidth={20} // Grosor fijo por ahora, o relativo si se guardó
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={annotation.opacity || 0.5}
+                style={{ cursor: mode === 'annotate' ? 'pointer' : 'default', pointerEvents: 'auto' }} // Permitir eventos en el trazo
+                onClick={(e) => handleAnnotationClick(annotation, e as any)}
+              />
+              {isSelected && (
+                <polyline
+                  points={pointsString}
+                  fill="none"
+                  stroke="#2196F3"
+                  strokeWidth={1}
+                  opacity={1}
+                />
+              )}
+            </svg>
+          );
+        }
+
+        // HIGHLIGHT rectangular (legacy o creado de otra forma)
         const pixels = normalizedToPixels(annotation.rect, pageWidth, pageHeight);
         return (
           <div
@@ -148,7 +194,7 @@ export function AnnotationOverlay({
               width: `${pixels.width}px`,
               height: `${pixels.height}px`,
               backgroundColor: annotation.color || '#FFEB3B',
-              opacity: annotation.opacity || 0.3,
+              opacity: annotation.opacity || 0.5,
               border: isSelected ? '2px solid #2196F3' : 'none',
               pointerEvents: mode === 'annotate' ? 'auto' : 'none',
               cursor: mode === 'annotate' ? 'pointer' : 'default',

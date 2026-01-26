@@ -44,7 +44,7 @@ export function PdfReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-full h-[95vh] m-0 p-0 max-h-[95vh]">
+      <DialogContent className="max-w-[95vw] w-full h-[95vh] m-0 p-0 max-h-[95vh]" hideCloseButton>
         <VisuallyHidden>
           <DialogTitle>
             {mode === 'annotate' ? 'Anotar documento' : 'Ver documento'}

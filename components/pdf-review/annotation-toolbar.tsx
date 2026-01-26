@@ -32,7 +32,17 @@ interface AnnotationToolbarProps {
   hasSelectedAnnotation: boolean;
   isSaving: boolean;
   mode: 'view' | 'annotate';
+  currentColor: string;
+  onColorChange: (color: string) => void;
 }
+
+const COLORS = [
+  { value: '#000000', label: 'Negro' },
+  { value: '#ef4444', label: 'Rojo' },
+  { value: '#3b82f6', label: 'Azul' },
+  { value: '#22c55e', label: 'Verde' },
+  { value: '#eab308', label: 'Amarillo' },
+];
 
 export function AnnotationToolbar({
   selectedTool,
@@ -44,6 +54,8 @@ export function AnnotationToolbar({
   hasSelectedAnnotation,
   isSaving,
   mode,
+  currentColor,
+  onColorChange,
 }: AnnotationToolbarProps) {
   if (mode === 'view') {
     return (
@@ -154,6 +166,26 @@ export function AnnotationToolbar({
               <p>Alejar (-)</p>
             </TooltipContent>
           </Tooltip>
+
+          <div className="flex items-center gap-2 border-l pl-4 ml-2 mr-2">
+            <span className="text-sm font-medium mr-1">Color:</span>
+            {COLORS.map((color) => (
+              <Tooltip key={color.value}>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`w-5 h-5 rounded-full border transition-transform hover:scale-110 ${
+                      currentColor === color.value ? 'ring-2 ring-offset-2 ring-black dark:ring-white' : ''
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    onClick={() => onColorChange(color.value)}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{color.label}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
 
           {hasSelectedAnnotation && (
             <Tooltip>

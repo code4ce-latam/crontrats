@@ -44,6 +44,7 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
   textInputRef,
 }: DraggableAnnotationProps) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
   const dragRef = useRef<{
     isDragging: boolean;
     startX: number;
@@ -61,6 +62,22 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     initialTop: 0,
     offsetX: 0,
     offsetY: 0,
+    pointerId: null,
+  });
+
+  const resizeRef = useRef<{
+    isResizing: boolean;
+    startX: number;
+    startY: number;
+    initialWidth: number;
+    initialHeight: number;
+    pointerId: number | null;
+  }>({
+    isResizing: false,
+    startX: 0,
+    startY: 0,
+    initialWidth: 0,
+    initialHeight: 0,
     pointerId: null,
   });
   
@@ -83,16 +100,40 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
   // Solo en el cliente después de la hidratación
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (elementRef.current && !dragRef.current.isDragging) {
+    if (elementRef.current && !dragRef.current.isDragging && !resizeRef.current.isResizing) {
       elementRef.current.style.left = `${pixels.x}px`;
       elementRef.current.style.top = `${pixels.y}px`;
+      elementRef.current.style.width = `${pixels.width}px`;
+      elementRef.current.style.height = `${pixels.height}px`;
       elementRef.current.style.transform = '';
     }
-  }, [pixels.x, pixels.y]);
+  }, [pixels.x, pixels.y, pixels.width, pixels.height]);
 
   // Definir handlers antes de usarlos
   const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (!dragRef.current.isDragging || !elementRef.current) return;
+    if (!elementRef.current) return;
+
+    // Lógica de Resize
+    if (resizeRef.current.isResizing) {
+       if (e.pointerId !== resizeRef.current.pointerId) return;
+       e.preventDefault();
+       
+       requestAnimationFrame(() => {
+         if (!elementRef.current) return;
+         
+         const deltaX = (e.clientX - resizeRef.current.startX) / scale;
+         const deltaY = (e.clientY - resizeRef.current.startY) / scale;
+         
+         const newWidth = Math.max(20, resizeRef.current.initialWidth + deltaX);
+         const newHeight = Math.max(20, resizeRef.current.initialHeight + deltaY);
+         
+         elementRef.current.style.width = `${newWidth}px`;
+         elementRef.current.style.height = `${newHeight}px`;
+       });
+       return;
+    }
+
+    if (!dragRef.current.isDragging) return;
     if (e.pointerId !== dragRef.current.pointerId) return;
 
     e.preventDefault();
@@ -131,7 +172,52 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
   }, [scale, pageWidth, pageHeight, pixels.width, pixels.height]);
 
   const handlePointerUp = useCallback((e: PointerEvent) => {
-    if (!dragRef.current.isDragging || !elementRef.current) return;
+    if (!elementRef.current) return;
+
+    // Lógica de Resize
+    if (resizeRef.current.isResizing) {
+      if (e.pointerId !== resizeRef.current.pointerId) return;
+      
+      try {
+        // Liberar captura del target del evento si es posible
+        if (e.target && 'releasePointerCapture' in e.target) {
+           (e.target as Element).releasePointerCapture(e.pointerId);
+        }
+      } catch (err) {
+        // Ignorar error si el elemento ya no existe o no tiene captura
+      }
+
+      resizeRef.current.isResizing = false;
+      resizeRef.current.pointerId = null;
+      
+      // Cleanup listeners
+      if (handlersRef.current.move) window.removeEventListener('pointermove', handlersRef.current.move);
+      if (handlersRef.current.up) {
+        window.removeEventListener('pointerup', handlersRef.current.up);
+        window.removeEventListener('pointercancel', handlersRef.current.up);
+      }
+
+      // Calcular dimensiones finales y actualizar
+      const finalWidth = parseFloat(elementRef.current.style.width);
+      const finalHeight = parseFloat(elementRef.current.style.height);
+      
+      // Validar cambios significativos (opcional, pero buena práctica)
+      if (Math.abs(finalWidth - pixelsRef.current.width) > 1 || Math.abs(finalHeight - pixelsRef.current.height) > 1) {
+         const normalized = pixelsToNormalized(
+           pixelsRef.current.x,
+           pixelsRef.current.y,
+           finalWidth,
+           finalHeight,
+           pageWidth,
+           pageHeight
+         );
+         
+         onUpdate({ ...annotation, rect: normalized });
+      }
+      return;
+    }
+
+    if (!dragRef.current.isDragging) return;
     if (e.pointerId !== dragRef.current.pointerId) return;
 
     elementRef.current.releasePointerCapture(e.pointerId);
@@ -209,6 +295,9 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     if (target.tagName === 'TEXTAREA' || target.closest('textarea')) {
       return;
     }
+    
+    // No iniciar drag si estamos haciendo resize (el stopPropagation en handleResizePointerDown debería prevenir esto, pero por seguridad)
+    if (resizeRef.current.isResizing) return;
 
     const element = elementRef.current;
     if (!element) return;
@@ -274,6 +363,33 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     };
   }, []);
 
+  const handleResizePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (mode !== 'annotate' || isEditing) return;
+    e.stopPropagation(); // Evitar iniciar drag en el padre
+    
+    const element = elementRef.current;
+    if (!element) return;
+    
+    const target = e.target as HTMLElement;
+    target.setPointerCapture(e.pointerId); // Capturar en el handle
+    
+    resizeRef.current = {
+      isResizing: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialWidth: pixelsRef.current.width,
+      initialHeight: pixelsRef.current.height,
+      pointerId: e.pointerId,
+    };
+    
+    // Agregar listeners globales
+    if (handlersRef.current.move) window.addEventListener('pointermove', handlersRef.current.move);
+    if (handlersRef.current.up) {
+      window.addEventListener('pointerup', handlersRef.current.up);
+      window.addEventListener('pointercancel', handlersRef.current.up);
+    }
+  }, [mode, isEditing]);
+
   const canDrag = mode === 'annotate' && !isEditing;
   const isComment = annotation.type === 'COMMENT';
 
@@ -286,7 +402,7 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     height: `${pixels.height}px`,
     pointerEvents: mode === 'annotate' ? 'auto' : 'none',
     cursor: isEditing ? 'text' : (currentTool === 'text' ? 'text' : (canDrag ? 'grab' : 'default')),
-    zIndex: isSelected || isEditing ? 10 : 1,
+    zIndex: isSelected || isEditing || isHovered ? 10 : 1,
     userSelect: 'none',
     touchAction: 'none',
     transition: 'all 0.1s ease-out', // Siempre usar transición, se desactiva durante drag vía style directo
@@ -312,7 +428,7 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
   } : {
     // TEXT
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    border: `2px solid ${isSelected || isEditing ? '#2196F3' : annotation.color || '#000'}`,
+    border: `2px solid ${isSelected || isEditing ? '#2196F3' : annotation.color || '#3b82f6'}`,
     padding: '4px',
     fontSize: '12px',
     minHeight: '24px',
@@ -327,6 +443,8 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
       ref={elementRef}
       style={containerStyle}
       onPointerDown={handlePointerDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => {
         if (!dragRef.current.isDragging && !isEditing) {
           onSelect(annotation, e);
@@ -340,6 +458,34 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
       {/* Borde de selección */}
       {(isSelected || isEditing) && (
         <div className="absolute inset-0 border-2 border-blue-500 pointer-events-none" />
+      )}
+        
+      {/* Botón de eliminar */}
+      {((isSelected || isHovered) && !isEditing) && (
+        <div
+          className="absolute -top-3 -right-3 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center cursor-pointer shadow-md hover:bg-red-600 z-20 pointer-events-auto"
+          onPointerDown={(e) => e.stopPropagation()} // Evitar iniciar drag
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(annotation);
+          }}
+          title="Eliminar"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </div>
+      )}
+
+      {/* Handle de Resize */}
+      {((isSelected || isHovered) && !isEditing) && (
+        <div
+          className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize z-20 flex items-end justify-end p-0.5 pointer-events-auto"
+          onPointerDown={handleResizePointerDown}
+        >
+          <div className="w-2.5 h-2.5 bg-blue-500 rounded-sm border border-white" />
+        </div>
       )}
 
       <div style={contentStyle}>
@@ -370,15 +516,18 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
               onBlur={() => onTextBlur(annotation)}
               onKeyDown={(e) => onTextKeyDown(e, annotation)}
               onClick={(e) => e.stopPropagation()}
-              className="w-full h-full bg-transparent border-none outline-none resize-none text-black text-xs p-1"
-              style={{ minHeight: '36px', fontFamily: 'inherit' }}
+              className="w-full h-full bg-transparent border-none outline-none resize-none text-xs p-1 whitespace-pre-wrap"
+              style={{ minHeight: '36px', fontFamily: 'inherit', color: annotation.color || '#000' }}
               autoFocus
               placeholder="Escribe tu texto..."
             />
           ) : (
-            <span className="truncate w-full block pointer-events-none select-none">
+            <div 
+              className="w-full h-full text-xs p-1 break-words whitespace-pre-wrap overflow-hidden pointer-events-none select-none"
+              style={{ color: annotation.color || '#000' }}
+            >
               {annotation.text || 'Click para editar'}
-            </span>
+            </div>
           )
         )}
       </div>
