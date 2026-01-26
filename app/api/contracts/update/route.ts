@@ -64,7 +64,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Si se cambia la carpeta, validar permisos en la nueva carpeta
+
+    // Verificar que el usuario es OWNER o EDITOR del workspace
+    const workspaceId = await getUserWorkspaceId(supabase);
+    if (!workspaceId || workspaceId !== contract.workspace_id) {
+      return NextResponse.json(
+        { error: "No perteneces a este workspace" },
+        { status: 403 }
+      );
+    }
+
+    // Paralelizar validaciones independientes
+    const [membershipResult, folderValidation] = await Promise.all([
+      // Verificar rol del usuario
+      supabase
+        .from('workspace_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'ACTIVE')
+        .single(),
+      
+      // Si se cambia la carpeta, validar en paralelo
+      folder_id !== undefined && folder_id !== contract.folder_id && folder_id
+        ? supabase
+            .from('folders')
+            .select('id, workspace_id')
+            .eq('id', folder_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    const { data: membership } = membershipResult;
+    if (!membership || (membership.role !== 'OWNER' && membership.role !== 'EDITOR')) {
+      return NextResponse.json(
+        { error: "Solo los propietarios y editores pueden editar contratos" },
+        { status: 403 }
+      );
+    }
+
+    // Validar nueva carpeta si se cambió (ya se obtuvo en paralelo)
     if (folder_id !== undefined && folder_id !== contract.folder_id) {
       if (!folder_id) {
         return NextResponse.json(
@@ -73,13 +112,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Verificar que la nueva carpeta existe y pertenece al workspace
-      const { data: newFolder, error: folderError } = await supabase
-        .from('folders')
-        .select('id, workspace_id')
-        .eq('id', folder_id)
-        .single();
-
+      const { data: newFolder, error: folderError } = folderValidation;
       if (folderError || !newFolder) {
         return NextResponse.json(
           { error: "La carpeta seleccionada no existe" },
@@ -102,30 +135,6 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
-    }
-
-    // Verificar que el usuario es OWNER o EDITOR del workspace
-    const workspaceId = await getUserWorkspaceId(supabase);
-    if (!workspaceId || workspaceId !== contract.workspace_id) {
-      return NextResponse.json(
-        { error: "No perteneces a este workspace" },
-        { status: 403 }
-      );
-    }
-
-    const { data: membership } = await supabase
-      .from('workspace_members')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'ACTIVE')
-      .single();
-
-    if (!membership || (membership.role !== 'OWNER' && membership.role !== 'EDITOR')) {
-      return NextResponse.json(
-        { error: "Solo los propietarios y editores pueden editar contratos" },
-        { status: 403 }
-      );
     }
 
     // Si se cambia el profile_id, validar
@@ -272,11 +281,8 @@ export async function POST(request: NextRequest) {
 
     // Actualizar field_values si se proporcionan
     if (field_values && Array.isArray(field_values)) {
-      console.log("[Contracts/Update] Field values recibidos:", JSON.stringify(field_values, null, 2));
-      
       // Obtener profile_id actual (puede haber cambiado)
       const currentProfileId = updatedContract.profile_id || contract.profile_id;
-      console.log("[Contracts/Update] Profile ID actual:", currentProfileId);
       
       // Si se quitó el perfil, eliminar todos los field_values
       if (!currentProfileId && contract.profile_id) {
@@ -294,8 +300,6 @@ export async function POST(request: NextRequest) {
           .from('contract_profile_fields')
           .select('id, type')
           .eq('profile_id', currentProfileId);
-
-        console.log("[Contracts/Update] Campos del perfil encontrados:", profileFields?.length || 0);
 
         if (profileFields && profileFields.length > 0) {
           // Si se cambió el perfil, eliminar field_values del perfil anterior
@@ -320,77 +324,62 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Upsert field_values del nuevo perfil (o actualizar los existentes)
+          // Preparar batch upsert de field_values
           if (field_values.length > 0) {
-            console.log("[Contracts/Update] Procesando", field_values.length, "field values");
-            
-            for (const fv of field_values) {
-              const field = profileFields.find(f => f.id === fv.profile_field_id);
-              if (!field) {
-                console.warn("[Contracts/Update] Campo no encontrado en perfil:", fv.profile_field_id);
-                continue;
-              }
+            const profileFieldsMap = new Map(profileFields.map(f => [f.id, f]));
+            const valueDataArray = field_values
+              .map(fv => {
+                const field = profileFieldsMap.get(fv.profile_field_id);
+                if (!field) return null;
 
-              const baseValue = {
-                workspace_id: workspaceId,
-                contract_id: contract_id,
-                profile_field_id: fv.profile_field_id,
-              };
+                const baseValue = {
+                  workspace_id: workspaceId,
+                  contract_id: contract_id,
+                  profile_field_id: fv.profile_field_id,
+                };
 
-              // Mapear valor según tipo de campo
-              let valueData: any = { ...baseValue };
-              switch (field.type) {
-                case 'TEXT':
-                  valueData.value_text = fv.value !== null && fv.value !== undefined ? String(fv.value) : null;
-                  break;
-                case 'NUMBER':
-                  valueData.value_number = fv.value !== null && fv.value !== undefined && fv.value !== '' ? parseFloat(String(fv.value)) : null;
-                  break;
-                case 'DATE':
-                  valueData.value_date = fv.value || null;
-                  break;
-                case 'MONEY':
-                  valueData.value_money = fv.value !== null && fv.value !== undefined && fv.value !== '' ? parseFloat(String(fv.value)) : null;
-                  break;
-                case 'CHECKBOX':
-                  valueData.value_bool = fv.value === true || fv.value === 'true' || fv.value === 1;
-                  break;
-                case 'SELECT':
-                  valueData.value_json = fv.value || null;
-                  break;
-              }
+                // Mapear valor según tipo de campo
+                let valueData: any = { ...baseValue };
+                switch (field.type) {
+                  case 'TEXT':
+                    valueData.value_text = fv.value !== null && fv.value !== undefined ? String(fv.value) : null;
+                    break;
+                  case 'NUMBER':
+                    valueData.value_number = fv.value !== null && fv.value !== undefined && fv.value !== '' ? parseFloat(String(fv.value)) : null;
+                    break;
+                  case 'DATE':
+                    valueData.value_date = fv.value || null;
+                    break;
+                  case 'MONEY':
+                    valueData.value_money = fv.value !== null && fv.value !== undefined && fv.value !== '' ? parseFloat(String(fv.value)) : null;
+                    break;
+                  case 'CHECKBOX':
+                    valueData.value_bool = fv.value === true || fv.value === 'true' || fv.value === 1;
+                    break;
+                  case 'SELECT':
+                    valueData.value_json = fv.value || null;
+                    break;
+                }
+                return valueData;
+              })
+              .filter((v): v is any => v !== null);
 
-              console.log("[Contracts/Update] Upserting field_value:", {
-                profile_field_id: fv.profile_field_id,
-                type: field.type,
-                value: fv.value,
-                valueData
-              });
-
-              // Upsert usando ON CONFLICT
+            // Batch upsert usando ON CONFLICT
+            if (valueDataArray.length > 0) {
               const { error: upsertError } = await supabaseAdmin
                 .from('contract_field_values')
-                .upsert(valueData, {
+                .upsert(valueDataArray, {
                   onConflict: 'contract_id,profile_field_id',
                 });
 
               if (upsertError) {
-                console.error("[Contracts/Update] Error upserting field_value:", upsertError);
-                throw new Error(`Error al actualizar el campo: ${upsertError.message}`);
+                console.error("[Contracts/Update] Error upserting field_values:", upsertError);
+                throw new Error(`Error al actualizar los campos: ${upsertError.message}`);
               }
             }
-            console.log("[Contracts/Update] Field values actualizados correctamente");
-          } else {
-            console.log("[Contracts/Update] No hay field_values para procesar (array vacío)");
           }
-        } else {
-          console.log("[Contracts/Update] No se encontraron campos del perfil");
         }
-      } else {
-        console.log("[Contracts/Update] No hay profile_id, no se procesan field_values");
       }
-    } else {
-      console.log("[Contracts/Update] No se proporcionaron field_values o no es un array");
     }
 
     // Registrar actividad

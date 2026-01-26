@@ -53,32 +53,34 @@ export async function GET() {
       );
     }
 
-    // Enriquecer con información del profile
-    const contractsWithProfile = await Promise.all(
-      (contracts || []).map(async (contract) => {
-        let profile = null;
-        if (contract.profile_id) {
-          const { data: profileData } = await supabase
-            .from('contract_profiles')
-            .select('id, name')
-            .eq('id', contract.profile_id)
-            .single();
-          profile = profileData;
-        }
+    // Obtener todos los profile_ids únicos
+    const profileIds = [...new Set((contracts || []).map(c => c.profile_id).filter(Boolean))];
+    
+    // Obtener todos los perfiles de una vez (batch query)
+    let profilesMap = new Map();
+    if (profileIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('contract_profiles')
+        .select('id, name')
+        .in('id', profileIds);
+      
+      if (profilesData) {
+        profilesMap = new Map(profilesData.map(p => [p.id, p]));
+      }
+    }
 
-        return {
-          id: contract.id,
-          title: contract.title,
-          status: contract.status,
-          start_date: contract.start_date,
-          end_date: contract.end_date,
-          created_at: contract.created_at,
-          updated_at: contract.updated_at,
-          profile: profile || null,
-          folder: contract.folders || null,
-        };
-      })
-    );
+    // Mapear contratos con perfiles
+    const contractsWithProfile = (contracts || []).map(contract => ({
+      id: contract.id,
+      title: contract.title,
+      status: contract.status,
+      start_date: contract.start_date,
+      end_date: contract.end_date,
+      created_at: contract.created_at,
+      updated_at: contract.updated_at,
+      profile: contract.profile_id ? profilesMap.get(contract.profile_id) || null : null,
+      folder: contract.folders || null,
+    }));
 
     return NextResponse.json({
       success: true,

@@ -165,56 +165,69 @@ export async function getContractWithDetails(
       return null;
     }
 
-    // Obtener profile si existe
-    let profile = null;
-    if (contract.profile_id) {
-      const { data: profileData } = await supabase
-        .from('contract_profiles')
-        .select('id, name, description')
-        .eq('id', contract.profile_id)
-        .single();
-      profile = profileData;
-    }
+    // Paralelizar consultas independientes
+    const [
+      profileResult,
+      folderResult,
+      fieldValuesResult,
+      fileVersionsResult,
+      additionalFilesResult,
+    ] = await Promise.all([
+      // Obtener profile si existe
+      contract.profile_id
+        ? supabase
+            .from('contract_profiles')
+            .select('id, name, description')
+            .eq('id', contract.profile_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
+      
+      // Obtener folder
+      supabase
+        .from('folders')
+        .select('id, name, path')
+        .eq('id', contract.folder_id)
+        .single(),
 
-    // Obtener folder
-    const { data: folder } = await supabase
-      .from('folders')
-      .select('id, name, path')
-      .eq('id', contract.folder_id)
-      .single();
+      // Obtener field values con profile fields
+      supabase
+        .from('contract_field_values')
+        .select(`
+          *,
+          profile_field:contract_profile_fields (
+            id,
+            key,
+            label,
+            type,
+            is_required,
+            options
+          )
+        `)
+        .eq('contract_id', contractId)
+        .order('created_at', { ascending: true }),
 
-    // Obtener field values con profile fields
-    const { data: fieldValues } = await supabase
-      .from('contract_field_values')
-      .select(`
-        *,
-        profile_field:contract_profile_fields (
-          id,
-          key,
-          label,
-          type,
-          is_required,
-          options
-        )
-      `)
-      .eq('contract_id', contractId)
-      .order('created_at', { ascending: true });
+      // Obtener file versions
+      supabase
+        .from('contract_file_versions')
+        .select('*')
+        .eq('contract_id', contractId)
+        .order('version', { ascending: false }),
 
-    // Obtener file versions
-    const { data: fileVersions } = await supabase
-      .from('contract_file_versions')
-      .select('*')
-      .eq('contract_id', contractId)
-      .order('version', { ascending: false });
+      // Obtener additional files
+      supabase
+        .from('contract_additional_files')
+        .select('*')
+        .eq('contract_id', contractId)
+        .order('uploaded_at', { ascending: false }),
+    ]);
 
-    // Obtener additional files
-    const { data: additionalFiles } = await supabase
-      .from('contract_additional_files')
-      .select('*')
-      .eq('contract_id', contractId)
-      .order('uploaded_at', { ascending: false });
+    const profile = profileResult.data;
+    const folder = folderResult.data;
+    const fieldValues = fieldValuesResult.data;
+    const fileVersions = fileVersionsResult.data;
+    const additionalFiles = additionalFilesResult.data;
 
-    // Obtener acceso del usuario actual
+    // Obtener acceso del usuario actual (depende del contrato, debe ser después)
     const access = await getContractAccess(supabase, contractId);
 
     return {

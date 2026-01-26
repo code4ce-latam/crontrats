@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
 import { EditContractForm } from "@/components/contracts/edit-contract-form";
+import { BreadcrumbsWrapper } from "@/components/breadcrumbs-wrapper";
 import { getContractWithDetails, getUserWorkspaceId } from "@/lib/supabase/contracts";
 
-async function EditContractPageContent({ contractId }: { contractId: string }) {
+async function EditContractPageContent({ contractId, contract }: { contractId: string; contract: any }) {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user;
@@ -16,13 +16,6 @@ async function EditContractPageContent({ contractId }: { contractId: string }) {
   const workspaceId = await getUserWorkspaceId(supabase);
   if (!workspaceId) {
     redirect("/auth/login");
-  }
-
-  // Obtener contrato completo
-  const contract = await getContractWithDetails(supabase, contractId);
-
-  if (!contract) {
-    redirect("/protected/contratos");
   }
 
   // Verificar acceso EDIT/OWNER
@@ -40,27 +33,40 @@ export default async function EditarContratoPage({
 }) {
   const { id } = await params;
   
+  // Obtener contrato completo una sola vez (se reutiliza en EditContractPageContent)
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  const workspaceId = await getUserWorkspaceId(supabase);
+  if (!workspaceId) {
+    redirect("/auth/login");
+  }
+
+  const contract = await getContractWithDetails(supabase, id);
+
+  if (!contract) {
+    redirect("/protected/contratos");
+  }
+
+  const contractTitle = contract?.title;
+
   return (
-    <div className="flex-1 w-full flex flex-col gap-6 p-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Editar contrato</h1>
-        <p className="text-muted-foreground">
-          Actualiza la información del contrato
-        </p>
+    <BreadcrumbsWrapper title={contractTitle}>
+      <div className="flex-1 w-full flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold">Editar contrato</h1>
+          <p className="text-muted-foreground">
+            Actualiza la información del contrato
+          </p>
+        </div>
+        <EditContractPageContent contractId={id} contract={contract} />
       </div>
-      <Suspense
-        fallback={
-          <div className="text-center py-8 text-muted-foreground">
-            <div className="animate-pulse space-y-4">
-              <div className="h-8 w-64 bg-muted rounded mx-auto"></div>
-              <div className="h-96 w-full bg-muted rounded"></div>
-            </div>
-          </div>
-        }
-      >
-        <EditContractPageContent contractId={id} />
-      </Suspense>
-    </div>
+    </BreadcrumbsWrapper>
   );
 }
 

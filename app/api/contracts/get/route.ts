@@ -43,32 +43,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Enriquecer file_versions con información del usuario que subió
+    // Enriquecer file_versions y additional_files con información de usuarios (batch query)
+    const allUserIds = new Set<string>();
     if (contract.file_versions && contract.file_versions.length > 0) {
-      const userIds = [...new Set(contract.file_versions.map(v => v.uploaded_by_user_id))];
+      contract.file_versions.forEach(v => {
+        if (v.uploaded_by_user_id) allUserIds.add(v.uploaded_by_user_id);
+      });
+    }
+    if (contract.additional_files && contract.additional_files.length > 0) {
+      contract.additional_files.forEach(f => {
+        if (f.uploaded_by_user_id) allUserIds.add(f.uploaded_by_user_id);
+      });
+    }
+
+    // Obtener todos los usuarios de una vez
+    let usersMap = new Map();
+    if (allUserIds.size > 0) {
       const { data: users } = await supabase
         .from('profiles')
         .select('user_id, display_name, avatar_url')
-        .in('user_id', userIds);
+        .in('user_id', Array.from(allUserIds));
 
-      const usersMap = new Map(users?.map(u => [u.user_id, u]) || []);
+      if (users) {
+        usersMap = new Map(users.map(u => [u.user_id, u]));
+      }
+    }
 
+    // Aplicar usuarios a file_versions
+    if (contract.file_versions && contract.file_versions.length > 0) {
       contract.file_versions = contract.file_versions.map(version => ({
         ...version,
         uploaded_by: usersMap.get(version.uploaded_by_user_id) || null,
       }));
     }
 
-    // Enriquecer additional_files con información del usuario que subió
+    // Aplicar usuarios a additional_files
     if (contract.additional_files && contract.additional_files.length > 0) {
-      const userIds = [...new Set(contract.additional_files.map(f => f.uploaded_by_user_id))];
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, avatar_url')
-        .in('user_id', userIds);
-
-      const usersMap = new Map(users?.map(u => [u.user_id, u]) || []);
-
       contract.additional_files = contract.additional_files.map(file => ({
         ...file,
         uploaded_by: usersMap.get(file.uploaded_by_user_id) || null,

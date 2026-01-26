@@ -92,33 +92,39 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
     try {
       const supabase = createClient();
       
-      // Cargar perfiles activos
-      const { data: profilesData } = await supabase
-        .from('contract_profiles')
-        .select('id, name, description, is_active')
-        .eq('workspace_id', workspaceId)
-        .eq('is_active', true)
-        .order('name');
+      // Paralelizar carga de perfiles y carpetas
+      const [profilesResult, foldersResult] = await Promise.all([
+        supabase
+          .from('contract_profiles')
+          .select('id, name, description, is_active')
+          .eq('workspace_id', workspaceId)
+          .eq('is_active', true)
+          .order('name'),
+        supabase
+          .from('folders')
+          .select('id, name, path')
+          .eq('workspace_id', workspaceId)
+          .order('name'),
+      ]);
       
-      setProfiles(profilesData || []);
+      setProfiles(profilesResult.data || []);
 
-      // Cargar carpetas accesibles
-      const { data: foldersData } = await supabase
-        .from('folders')
-        .select('id, name, path')
-        .eq('workspace_id', workspaceId)
-        .order('name');
-      
-      const accessibleFolders = [];
-      if (foldersData) {
-        for (const folder of foldersData) {
-          const access = await getFolderAccess(supabase, folder.id);
-          if (access === 'EDIT' || access === 'OWNER') {
-            accessibleFolders.push(folder);
-          }
-        }
+      // Paralelizar verificaciones de acceso de carpetas
+      const foldersData = foldersResult.data || [];
+      if (foldersData.length > 0) {
+        const accessPromises = foldersData.map(folder => 
+          getFolderAccess(supabase, folder.id).then(access => ({ folder, access }))
+        );
+        
+        const accessResults = await Promise.all(accessPromises);
+        const accessibleFolders = accessResults
+          .filter(({ access }) => access === 'EDIT' || access === 'OWNER')
+          .map(({ folder }) => folder);
+        
+        setAvailableFolders(accessibleFolders);
+      } else {
+        setAvailableFolders([]);
       }
-      setAvailableFolders(accessibleFolders);
     } catch (error) {
       console.error("[EditContractForm] Error cargando datos:", error);
     } finally {

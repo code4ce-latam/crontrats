@@ -10,6 +10,8 @@ import { ActivitiesProvider } from "@/components/activities-context";
 import { ActivitiesPanel } from "@/components/activities-panel";
 import { ActivitiesToggle } from "@/components/activities-toggle";
 import { ActivitiesContentWrapper } from "@/components/activities-content-wrapper";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { BreadcrumbsProvider } from "@/components/breadcrumbs-context";
 import { hasEnvVars } from "@/lib/utils";
 import { Suspense } from "react";
 
@@ -21,8 +23,9 @@ export default function ProtectedLayout({
   return (
     <SidebarProvider>
       <ActivitiesProvider>
-        <AvatarCleanup />
-        <WorkspaceEnsure />
+        <BreadcrumbsProvider>
+          <AvatarCleanup />
+          <WorkspaceEnsure />
         <div className="min-h-screen flex overflow-x-hidden">
           <Suspense
             fallback={
@@ -79,6 +82,7 @@ export default function ProtectedLayout({
                 </div>
               </div>
             </nav>
+            <Breadcrumbs />
             <div className="flex-1 flex overflow-x-hidden relative">
               <ActivitiesPanel />
               <ActivitiesContentWrapper>
@@ -87,6 +91,7 @@ export default function ProtectedLayout({
             </div>
           </div>
         </div>
+        </BreadcrumbsProvider>
       </ActivitiesProvider>
     </SidebarProvider>
   );
