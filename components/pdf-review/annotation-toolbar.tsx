@@ -13,29 +13,31 @@ import {
   Highlighter, 
   Type, 
   MessageSquare, 
-  Trash2,
   Save,
   X,
   ZoomIn,
   ZoomOut,
   Bell,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
+import { useState } from "react";
 
 export type ToolType = 'select' | 'highlight' | 'text' | 'comment';
 
 interface AnnotationToolbarProps {
   selectedTool: ToolType;
   onToolChange: (tool: ToolType | 'zoom-in' | 'zoom-out') => void;
-  onDelete: () => void;
   onSave: () => void;
   onClose: () => void;
-  hasSelectedAnnotation: boolean;
   isSaving: boolean;
   mode: 'view' | 'annotate';
   currentColor: string;
   onColorChange: (color: string) => void;
   notifyParticipants: boolean;
   onNotifyChange: (notify: boolean) => void;
+  isMinimized?: boolean;
+  onToggleMinimize?: () => void;
 }
 
 const COLORS = [
@@ -49,16 +51,16 @@ const COLORS = [
 export function AnnotationToolbar({
   selectedTool,
   onToolChange,
-  onDelete,
   onSave,
   onClose,
-  hasSelectedAnnotation,
   isSaving,
   mode,
   currentColor,
   onColorChange,
   notifyParticipants,
   onNotifyChange,
+  isMinimized = false,
+  onToggleMinimize,
 }: AnnotationToolbarProps) {
   if (mode === 'view') {
     return (
@@ -76,9 +78,51 @@ export function AnnotationToolbar({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex items-center justify-between p-4 border-b bg-background">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium mr-2">Herramientas:</span>
+      <div className={`flex items-center justify-between border-b bg-background transition-all ${
+        isMinimized ? 'p-2' : 'p-4'
+      }`}>
+        {isMinimized ? (
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm font-medium text-muted-foreground">Herramientas minimizadas</span>
+            {onToggleMinimize && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onToggleMinimize}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Expandir herramientas</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium mr-2">Herramientas:</span>
+              {onToggleMinimize && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onToggleMinimize}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Minimizar herramientas</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
           
           <Tooltip>
             <TooltipTrigger asChild>
@@ -189,23 +233,6 @@ export function AnnotationToolbar({
               </Tooltip>
             ))}
           </div>
-
-          {hasSelectedAnnotation && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={onDelete}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Eliminar selección (Supr)</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
         
         <div className="flex items-center gap-3">
@@ -239,6 +266,8 @@ export function AnnotationToolbar({
             Cerrar
           </Button>
         </div>
+          </>
+        )}
       </div>
     </TooltipProvider>
   );

@@ -50,6 +50,8 @@ export function PdfReviewer({
   
   const [selectedTool, setSelectedTool] = useState<ToolType>('select');
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [deletingAnnotationId, setDeletingAnnotationId] = useState<string | null>(null);
+  const [isToolbarMinimized, setIsToolbarMinimized] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [currentPath, setCurrentPath] = useState<{ x: number; y: number }[]>([]);
@@ -135,23 +137,73 @@ export function PdfReviewer({
     loadAnnotations();
   }, [fileVersionId]);
 
-  const handleDelete = useCallback((annotationToDelete?: Annotation) => {
-    // Solo se pueden eliminar anotaciones propias
-    if (annotationToDelete) {
-      setMyAnnotations(prev => prev.filter(ann => ann.id !== annotationToDelete.id));
-      if (selectedAnnotationId === annotationToDelete.id) {
-        setSelectedAnnotationId(null);
-      }
-      setHasUnsavedChanges(true);
-      return;
-    }
+  const handleDelete = useCallback(async (annotationToDelete?: Annotation) => {
+    // Determinar qué anotación eliminar
+    const annotationToRemove = annotationToDelete || 
+      (selectedAnnotationId ? myAnnotations.find(ann => ann.id === selectedAnnotationId) : null);
+    
+    if (!annotationToRemove) return;
 
-    // Si no, borrar la seleccionada
-    if (!selectedAnnotationId) return;
-    setMyAnnotations(prev => prev.filter(ann => ann.id !== selectedAnnotationId));
-    setSelectedAnnotationId(null);
+    // Marcar como eliminando
+    setDeletingAnnotationId(annotationToRemove.id);
+
+    // Verificar si la anotación está guardada antes de eliminarla del estado
+    const isSaved = my && my.annotations_json.some(ann => ann.id === annotationToRemove.id);
+    
+    // Obtener las anotaciones actualizadas (sin la eliminada) usando función de actualización
+    let updatedAnnotations: Annotation[] = [];
+    setMyAnnotations(prev => {
+      updatedAnnotations = prev.filter(ann => ann.id !== annotationToRemove.id);
+      return updatedAnnotations;
+    });
+    
+    if (selectedAnnotationId === annotationToRemove.id) {
+      setSelectedAnnotationId(null);
+    }
     setHasUnsavedChanges(true);
-  }, [selectedAnnotationId]);
+
+    // Si la anotación está guardada, actualizar en el servidor
+    if (isSaved) {
+      try {
+        // Guardar en el servidor con las anotaciones actualizadas
+        const response = await fetch('/api/contracts/annotations/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_version_id: fileVersionId,
+            annotations_json: updatedAnnotations,
+            notify: false,
+          }),
+        });
+
+        if (response.ok) {
+          // Recargar anotaciones para sincronizar
+          const listResponse = await fetch(`/api/contracts/annotations/list?file_version_id=${fileVersionId}`);
+          if (listResponse.ok) {
+            const listData = await listResponse.json();
+            setMy(listData.my);
+            setOthers(listData.others || []);
+            setAuthors(listData.authors || []);
+            
+            // Actualizar myAnnotations con las anotaciones del servidor
+            const savedAnnotations = listData.my?.annotations_json || [];
+            const savedIds = new Set(savedAnnotations.map((a: Annotation) => a.id));
+            const newLocalAnnotations = updatedAnnotations.filter(ann => !savedIds.has(ann.id));
+            setMyAnnotations([...savedAnnotations, ...newLocalAnnotations]);
+          }
+          setHasUnsavedChanges(false);
+        }
+      } catch (error) {
+        console.error("[PdfReviewer] Error eliminando anotación del servidor:", error);
+        // Si falla, mantener el estado local (la anotación ya fue eliminada localmente)
+      } finally {
+        setDeletingAnnotationId(null);
+      }
+    } else {
+      // Si no está guardada, solo eliminar localmente (más rápido)
+      setDeletingAnnotationId(null);
+    }
+  }, [selectedAnnotationId, myAnnotations, my, fileVersionId]);
 
   // Manejar atajos de teclado
   useEffect(() => {
@@ -336,6 +388,7 @@ export function PdfReviewer({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Guardar las anotaciones actuales
       const response = await fetch('/api/contracts/annotations/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -347,15 +400,24 @@ export function PdfReviewer({
       });
 
       if (response.ok) {
-        const data = await response.json();
-        // Recargar anotaciones para obtener la versión actualizada
+        // Recargar anotaciones desde el servidor
         const listResponse = await fetch(`/api/contracts/annotations/list?file_version_id=${fileVersionId}`);
         if (listResponse.ok) {
           const listData = await listResponse.json();
           setMy(listData.my);
           setOthers(listData.others || []);
           setAuthors(listData.authors || []);
-          setMyAnnotations(listData.my?.annotations_json || []);
+          
+          // MERGE: Combinar anotaciones guardadas con nuevas locales
+          // Esto preserva las anotaciones nuevas que se crearon después de guardar
+          const savedAnnotations = listData.my?.annotations_json || [];
+          const savedIds = new Set(savedAnnotations.map((a: Annotation) => a.id));
+          
+          // Preservar anotaciones nuevas que no están en el servidor (creadas localmente después de guardar)
+          const newLocalAnnotations = myAnnotations.filter(ann => !savedIds.has(ann.id));
+          
+          // Combinar: guardadas + nuevas locales (sin duplicados)
+          setMyAnnotations([...savedAnnotations, ...newLocalAnnotations]);
         }
         setHasUnsavedChanges(false);
       }
@@ -562,16 +624,16 @@ export function PdfReviewer({
       <AnnotationToolbar
         selectedTool={selectedTool}
         onToolChange={handleToolChange}
-        onDelete={handleDelete}
         onSave={handleSave}
         onClose={handleClose}
-        hasSelectedAnnotation={!!selectedAnnotationId}
         isSaving={isSaving}
         mode={mode}
         currentColor={currentColor}
         onColorChange={handleColorChange}
         notifyParticipants={notifyParticipants}
         onNotifyChange={setNotifyParticipants}
+        isMinimized={isToolbarMinimized}
+        onToggleMinimize={() => setIsToolbarMinimized(prev => !prev)}
       />
       
       <div className="flex flex-1 relative" style={{ minHeight: 0 }}>
@@ -985,6 +1047,8 @@ export function PdfReviewer({
           currentPage={currentPage}
           onPageChange={setCurrentPage}
           onAnnotationClick={(ann) => setSelectedAnnotationId(ann.id)}
+          onAnnotationDelete={handleDelete}
+          deletingAnnotationId={deletingAnnotationId}
           selectedAnnotationId={selectedAnnotationId}
           mode={mode}
           currentUserId={currentUserId}

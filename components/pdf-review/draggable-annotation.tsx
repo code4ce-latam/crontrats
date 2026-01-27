@@ -121,8 +121,9 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
        requestAnimationFrame(() => {
          if (!elementRef.current) return;
          
-         const deltaX = (e.clientX - resizeRef.current.startX) / scale;
-         const deltaY = (e.clientY - resizeRef.current.startY) / scale;
+         // Calcular delta directamente en píxeles (el contenedor ya está escalado)
+         const deltaX = e.clientX - resizeRef.current.startX;
+         const deltaY = e.clientY - resizeRef.current.startY;
          
          const newWidth = Math.max(20, resizeRef.current.initialWidth + deltaX);
          const newHeight = Math.max(20, resizeRef.current.initialHeight + deltaY);
@@ -141,15 +142,15 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     requestAnimationFrame(() => {
       if (!elementRef.current) return;
 
-      // Obtener el contenedor padre con scale
-      const container = elementRef.current.closest('[style*="transform: scale"]') as HTMLElement;
+      // Obtener el contenedor de la página (ya escalado)
+      const container = elementRef.current.closest('[data-page-number]') as HTMLElement;
       const containerRect = container?.getBoundingClientRect();
       
       if (!containerRect) return;
 
-      // Calcular la posición del cursor relativa al contenedor escalado
-      const containerX = (e.clientX - containerRect.left) / scale;
-      const containerY = (e.clientY - containerRect.top) / scale;
+      // Calcular la posición del cursor relativa al contenedor (ya escalado)
+      const containerX = e.clientX - containerRect.left;
+      const containerY = e.clientY - containerRect.top;
 
       // Calcular nueva posición restando el offset del cursor dentro del elemento
       let targetX = containerX - dragRef.current.offsetX;
@@ -237,13 +238,14 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     elementRef.current.style.transform = '';
 
     // Calcular posición final usando el mismo método que en handlePointerMove
-    const container = elementRef.current.closest('[style*="transform: scale"]') as HTMLElement;
+    const container = elementRef.current.closest('[data-page-number]') as HTMLElement;
     const containerRect = container?.getBoundingClientRect();
     
     if (!containerRect) return;
 
-    const containerX = (e.clientX - containerRect.left) / scale;
-    const containerY = (e.clientY - containerRect.top) / scale;
+    // Calcular la posición del cursor relativa al contenedor (ya escalado)
+    const containerX = e.clientX - containerRect.left;
+    const containerY = e.clientY - containerRect.top;
 
     let targetX = containerX - dragRef.current.offsetX;
     let targetY = containerY - dragRef.current.offsetY;
@@ -304,21 +306,20 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
 
     element.setPointerCapture(e.pointerId);
     
-    // Obtener el contenedor padre con scale
-    const container = element.closest('[style*="transform: scale"]') as HTMLElement;
+    // Obtener el contenedor de la página (ya escalado)
+    const container = element.closest('[data-page-number]') as HTMLElement;
     const containerRect = container?.getBoundingClientRect();
     
     if (!containerRect) return;
 
-    // Calcular la posición del cursor relativa al contenedor escalado (coordenadas lógicas)
-    const containerX = (e.clientX - containerRect.left) / scale;
-    const containerY = (e.clientY - containerRect.top) / scale;
+    // Calcular la posición del cursor relativa al contenedor (ya escalado)
+    const containerX = e.clientX - containerRect.left;
+    const containerY = e.clientY - containerRect.top;
 
-    // Obtener la posición visual actual del elemento en coordenadas lógicas del contenedor
-    // Usamos getBoundingClientRect para tener la posición visual exacta (incluyendo transformaciones previas)
+    // Obtener la posición visual actual del elemento en coordenadas del contenedor
     const elementRect = element.getBoundingClientRect();
-    const elementVisualX = (elementRect.left - containerRect.left) / scale;
-    const elementVisualY = (elementRect.top - containerRect.top) / scale;
+    const elementVisualX = elementRect.left - containerRect.left;
+    const elementVisualY = elementRect.top - containerRect.top;
 
     // Calcular el offset del cursor dentro del elemento (en coordenadas lógicas del contenedor)
     // El offset es la distancia desde la esquina superior izquierda visual del elemento hasta el cursor
@@ -408,34 +409,42 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     transition: 'all 0.1s ease-out', // Siempre usar transición, se desactiva durante drag vía style directo
   };
 
+  // Determinar si debe mostrar el contenido expandido cuando está seleccionado
+  const shouldShowExpanded = isSelected || isEditing;
+  const hasText = annotation.text && annotation.text.trim().length > 0;
+
   // Estilos específicos por tipo
   const contentStyle: React.CSSProperties = isComment ? {
-    width: isEditing ? `${Math.max(pixels.width, 200)}px` : '20px',
-    height: isEditing ? 'auto' : '20px',
-    minHeight: isEditing ? '60px' : '20px',
-    borderRadius: isEditing ? '4px' : '50%',
+    width: shouldShowExpanded ? `${Math.max(pixels.width, hasText ? pixels.width : 200)}px` : '20px',
+    height: shouldShowExpanded ? 'auto' : '20px',
+    minHeight: shouldShowExpanded ? (hasText ? 'auto' : '60px') : '20px',
+    borderRadius: shouldShowExpanded ? '4px' : '50%',
     backgroundColor: annotation.color || '#FF5722',
     border: isSelected || isEditing ? '2px solid #2196F3' : '2px solid #fff',
     display: 'flex',
-    alignItems: isEditing ? 'flex-start' : 'center',
-    justifyContent: isEditing ? 'flex-start' : 'center',
+    alignItems: shouldShowExpanded ? 'flex-start' : 'center',
+    justifyContent: shouldShowExpanded ? 'flex-start' : 'center',
     fontSize: '12px',
     color: '#fff',
     fontWeight: 'bold',
-    padding: isEditing ? '4px' : '0',
+    padding: shouldShowExpanded ? '4px' : '0',
     width: '100%',
     height: '100%',
+    boxShadow: shouldShowExpanded ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none',
   } : {
     // TEXT
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: shouldShowExpanded ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
     border: `2px solid ${isSelected || isEditing ? '#2196F3' : annotation.color || '#3b82f6'}`,
-    padding: '4px',
+    padding: shouldShowExpanded ? '4px' : '0',
     fontSize: '12px',
-    minHeight: '24px',
+    minHeight: shouldShowExpanded ? (hasText ? 'auto' : '36px') : '20px',
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: shouldShowExpanded ? 'flex-start' : 'center',
+    justifyContent: shouldShowExpanded ? 'flex-start' : 'center',
     width: '100%',
     height: '100%',
+    borderRadius: shouldShowExpanded ? '4px' : '50%',
+    boxShadow: shouldShowExpanded ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none',
   };
 
   return (
@@ -505,7 +514,19 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
               autoFocus
             />
           ) : (
-            <span className="text-xs pointer-events-none select-none">!</span>
+            <div className="w-full h-full flex items-center justify-center">
+              {isSelected && hasText ? (
+                <span className="text-xs text-white break-words whitespace-pre-wrap px-1 pointer-events-none select-none">
+                  {annotation.text}
+                </span>
+              ) : isSelected ? (
+                <span className="text-xs text-white/70 italic pointer-events-none select-none">
+                  Doble clic para editar
+                </span>
+              ) : (
+                <span className="text-xs pointer-events-none select-none">!</span>
+              )}
+            </div>
           )
         ) : (
           // TEXT
@@ -524,10 +545,24 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
             />
           ) : (
             <div 
-              className="w-full h-full text-xs p-1 break-words whitespace-pre-wrap overflow-hidden pointer-events-none select-none"
-              style={{ color: annotation.color || '#000' }}
+              className={`w-full text-xs break-words whitespace-pre-wrap pointer-events-none select-none ${
+                isSelected && hasText ? 'p-1' : 'p-0'
+              }`}
+              style={{ 
+                color: annotation.color || '#000',
+                minHeight: isSelected && hasText ? 'auto' : '20px',
+                display: 'flex',
+                alignItems: isSelected && hasText ? 'flex-start' : 'center',
+                justifyContent: isSelected && hasText ? 'flex-start' : 'center',
+              }}
             >
-              {annotation.text || 'Click para editar'}
+              {isSelected && hasText ? (
+                annotation.text
+              ) : isSelected ? (
+                <span className="text-muted-foreground italic">Doble clic para editar</span>
+              ) : (
+                <span className="opacity-0">.</span>
+              )}
             </div>
           )
         )}

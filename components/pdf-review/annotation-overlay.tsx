@@ -101,12 +101,14 @@ export function AnnotationOverlay({
     }
   };
 
+  // Calcular dimensiones escaladas para usar en los cálculos
+  const scaledWidth = pageWidth * scale;
+  const scaledHeight = pageHeight * scale;
+
   return (
     <div 
       className="absolute inset-0" 
       style={{ 
-        transform: `scale(${scale})`, 
-        transformOrigin: 'top left',
         pointerEvents: 'none',
         touchAction: 'none', // Importante para Pointer Events en móviles
         zIndex: 20, // Asegurar que esté sobre el PDF y el overlay de eventos
@@ -122,8 +124,8 @@ export function AnnotationOverlay({
             <DraggableAnnotation
               key={annotation.id}
               annotation={annotation}
-              pageWidth={pageWidth}
-              pageHeight={pageHeight}
+              pageWidth={scaledWidth}
+              pageHeight={scaledHeight}
               scale={scale}
               isSelected={isSelected}
               isEditing={isEditing}
@@ -154,7 +156,7 @@ export function AnnotationOverlay({
         // Si tiene points, es dibujo libre
         if (annotation.points && annotation.points.length > 0) {
           const pointsString = annotation.points
-            .map(p => `${p.x * pageWidth},${p.y * pageHeight}`)
+            .map(p => `${p.x * scaledWidth},${p.y * scaledHeight}`)
             .join(' ');
             
           return (
@@ -174,7 +176,7 @@ export function AnnotationOverlay({
                 points={pointsString}
                 fill="none"
                 stroke={annotation.color || '#FFEB3B'}
-                strokeWidth={20} // Grosor fijo por ahora, o relativo si se guardó
+                strokeWidth={20 * scale} // Ajustar grosor según el scale
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 opacity={annotation.opacity || 0.5}
@@ -186,7 +188,7 @@ export function AnnotationOverlay({
                   points={pointsString}
                   fill="none"
                   stroke="#2196F3"
-                  strokeWidth={1}
+                  strokeWidth={1 * scale}
                   opacity={1}
                 />
               )}
@@ -195,7 +197,7 @@ export function AnnotationOverlay({
         }
 
         // HIGHLIGHT rectangular (legacy o creado de otra forma)
-        const pixels = normalizedToPixels(annotation.rect, pageWidth, pageHeight);
+        const pixels = normalizedToPixels(annotation.rect, scaledWidth, scaledHeight);
         return (
           <div
             key={annotation.id}

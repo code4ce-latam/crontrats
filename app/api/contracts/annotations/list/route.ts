@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse, type NextRequest } from "next/server";
 import { getFileVersionContext } from "@/lib/supabase/annotations";
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const supabaseAdmin = createAdminClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -88,6 +90,7 @@ export async function GET(request: NextRequest) {
 
     let usersMap = new Map();
     if (allUserIds.size > 0) {
+      // Obtener información de perfiles
       const { data: users } = await supabase
         .from('profiles')
         .select('user_id, display_name, avatar_url')
@@ -95,6 +98,50 @@ export async function GET(request: NextRequest) {
 
       if (users) {
         usersMap = new Map(users.map(u => [u.user_id, u]));
+      }
+      
+      // Para usuarios sin perfil, intentar obtener email desde auth.users
+      const missingUserIds = Array.from(allUserIds).filter(id => !usersMap.has(id) || !usersMap.get(id)?.display_name);
+      if (missingUserIds.length > 0) {
+        try {
+          // Obtener usuarios desde auth.users usando Admin API
+          const { data: authUsersData } = await supabaseAdmin.auth.admin.listUsers();
+          if (authUsersData?.users) {
+            missingUserIds.forEach(userId => {
+              const authUser = authUsersData.users.find(u => u.id === userId);
+              if (authUser) {
+                // Intentar obtener display_name del perfil existente o usar email
+                const existingProfile = usersMap.get(userId);
+                const displayName = existingProfile?.display_name || 
+                                  authUser.user_metadata?.full_name ||
+                                  authUser.user_metadata?.name ||
+                                  `${authUser.user_metadata?.first_name || ''} ${authUser.user_metadata?.last_name || ''}`.trim() ||
+                                  authUser.email?.split('@')[0] ||
+                                  authUser.email ||
+                                  'Usuario desconocido';
+                
+                usersMap.set(userId, {
+                  user_id: userId,
+                  display_name: displayName,
+                  avatar_url: existingProfile?.avatar_url || authUser.user_metadata?.avatar_url || null,
+                });
+              }
+            });
+          }
+        } catch (error) {
+          console.error("[Annotations/List] Error obteniendo usuarios desde auth:", error);
+          // Si falla, usar email como fallback para usuarios sin perfil
+          missingUserIds.forEach(userId => {
+            if (!usersMap.has(userId) || !usersMap.get(userId)?.display_name) {
+              const existing = usersMap.get(userId);
+              usersMap.set(userId, {
+                user_id: userId,
+                display_name: existing?.display_name || 'Usuario desconocido',
+                avatar_url: existing?.avatar_url || null,
+              });
+            }
+          });
+        }
       }
     }
 
@@ -124,15 +171,31 @@ export async function GET(request: NextRequest) {
       },
     }));
 
-    // Obtener lista de autores para filtro
-    const authors = Array.from(allUserIds).map(userId => {
-      const userInfo = usersMap.get(userId);
-      return {
-        user_id: userId,
-        display_name: userInfo?.display_name || 'Usuario desconocido',
-        avatar_url: userInfo?.avatar_url || null,
-      };
+    // Obtener lista de autores para filtro (deduplicar por user_id)
+    const uniqueAuthorsMap = new Map<string, { user_id: string; display_name: string; avatar_url: string | null }>();
+    
+    // Agregar el usuario actual si tiene anotaciones
+    if (my) {
+      uniqueAuthorsMap.set(user.id, {
+        user_id: user.id,
+        display_name: my.created_by.display_name,
+        avatar_url: my.created_by.avatar_url,
+      });
+    }
+    
+    // Agregar otros usuarios
+    others.forEach(other => {
+      if (!uniqueAuthorsMap.has(other.created_by.user_id)) {
+        uniqueAuthorsMap.set(other.created_by.user_id, {
+          user_id: other.created_by.user_id,
+          display_name: other.created_by.display_name,
+          avatar_url: other.created_by.avatar_url,
+        });
+      }
     });
+    
+    // Convertir a array
+    const authors = Array.from(uniqueAuthorsMap.values());
 
     // Calcular last_updated_at
     const allUpdatedAts = [

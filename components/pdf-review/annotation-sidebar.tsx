@@ -8,6 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   FileText, 
   User,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import type { Annotation } from "@/lib/annotations/types";
 
@@ -32,6 +34,8 @@ interface AnnotationSidebarProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   onAnnotationClick: (annotation: Annotation) => void;
+  onAnnotationDelete?: (annotation: Annotation) => void;
+  deletingAnnotationId?: string | null;
   selectedAnnotationId: string | null;
   mode: 'view' | 'annotate';
   currentUserId: string;
@@ -46,6 +50,8 @@ export function AnnotationSidebar({
   currentPage,
   onPageChange,
   onAnnotationClick,
+  onAnnotationDelete,
+  deletingAnnotationId,
   selectedAnnotationId,
   mode,
   currentUserId,
@@ -206,6 +212,9 @@ export function AnnotationSidebar({
                         .toUpperCase()
                         .slice(0, 2) || 'U';
                       
+                      const isMyAnnotation = item.author.user_id === currentUserId;
+                      const canDelete = mode === 'annotate' && isMyAnnotation && onAnnotationDelete;
+                      
                       return (
                         <div
                           key={`${item.setId}-${ann.id}-${idx}`}
@@ -223,6 +232,25 @@ export function AnnotationSidebar({
                                  ann.type === 'TEXT' ? 'Texto' : 'Comentario'}
                               </span>
                             </div>
+                            {canDelete && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onAnnotationDelete && !deletingAnnotationId) {
+                                    onAnnotationDelete(ann);
+                                  }
+                                }}
+                                disabled={deletingAnnotationId === ann.id}
+                                className="p-1.5 rounded hover:bg-destructive/10 text-destructive hover:text-destructive transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Eliminar anotación"
+                              >
+                                {deletingAnnotationId === ann.id ? (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-5 w-5" />
+                                )}
+                              </button>
+                            )}
                           </div>
                           {ann.text && (
                             <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
