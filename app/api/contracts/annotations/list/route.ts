@@ -47,17 +47,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Obtener draft del usuario actual
-    const { data: draft } = await supabase
+    // Obtener mis anotaciones (del usuario actual)
+    const { data: myAnnotations } = await supabase
       .from('contract_file_annotations')
       .select('id, annotations_json, created_at, updated_at')
       .eq('file_version_id', file_version_id)
       .eq('created_by_user_id', user.id)
-      .eq('status', 'DRAFT')
       .maybeSingle();
 
-    // Obtener todas las anotaciones publicadas
-    const { data: published, error: publishedError } = await supabase
+    // Obtener anotaciones de otros usuarios
+    const { data: othersAnnotations, error: othersError } = await supabase
       .from('contract_file_annotations')
       .select(`
         id,
@@ -67,48 +66,90 @@ export async function GET(request: NextRequest) {
         created_by_user_id
       `)
       .eq('file_version_id', file_version_id)
-      .eq('status', 'PUBLISHED')
-      .order('created_at', { ascending: false });
+      .neq('created_by_user_id', user.id)
+      .order('updated_at', { ascending: false });
 
-    if (publishedError) {
-      console.error("[Annotations/List] Error obteniendo publicadas:", publishedError);
+    if (othersError) {
+      console.error("[Annotations/List] Error obteniendo anotaciones de otros:", othersError);
       return NextResponse.json(
-        { error: publishedError.message },
+        { error: othersError.message },
         { status: 500 }
       );
     }
 
-    // Enriquecer publicadas con información del usuario creador
-    const userIds = [...new Set((published || []).map(p => p.created_by_user_id))];
+    // Obtener información de usuarios (para my y others)
+    const allUserIds = new Set<string>();
+    if (myAnnotations) {
+      allUserIds.add(user.id);
+    }
+    (othersAnnotations || []).forEach(ann => {
+      allUserIds.add(ann.created_by_user_id);
+    });
+
     let usersMap = new Map();
-    
-    if (userIds.length > 0) {
+    if (allUserIds.size > 0) {
       const { data: users } = await supabase
         .from('profiles')
         .select('user_id, display_name, avatar_url')
-        .in('user_id', userIds);
+        .in('user_id', Array.from(allUserIds));
 
       if (users) {
         usersMap = new Map(users.map(u => [u.user_id, u]));
       }
     }
 
-    const publishedWithUsers = (published || []).map(p => ({
-      id: p.id,
-      annotations_json: p.annotations_json,
-      created_at: p.created_at,
-      updated_at: p.updated_at,
-      created_by: usersMap.get(p.created_by_user_id) || {
-        user_id: p.created_by_user_id,
+    // Enriquecer my con información del usuario
+    const my = myAnnotations ? {
+      id: myAnnotations.id,
+      annotations_json: myAnnotations.annotations_json,
+      created_at: myAnnotations.created_at,
+      updated_at: myAnnotations.updated_at,
+      created_by: usersMap.get(user.id) || {
+        user_id: user.id,
+        display_name: 'Tú',
+        avatar_url: null,
+      },
+    } : null;
+
+    // Enriquecer others con información de usuarios
+    const others = (othersAnnotations || []).map(ann => ({
+      id: ann.id,
+      annotations_json: ann.annotations_json,
+      created_at: ann.created_at,
+      updated_at: ann.updated_at,
+      created_by: usersMap.get(ann.created_by_user_id) || {
+        user_id: ann.created_by_user_id,
         display_name: 'Usuario desconocido',
         avatar_url: null,
       },
     }));
 
+    // Obtener lista de autores para filtro
+    const authors = Array.from(allUserIds).map(userId => {
+      const userInfo = usersMap.get(userId);
+      return {
+        user_id: userId,
+        display_name: userInfo?.display_name || 'Usuario desconocido',
+        avatar_url: userInfo?.avatar_url || null,
+      };
+    });
+
+    // Calcular last_updated_at
+    const allUpdatedAts = [
+      my?.updated_at,
+      ...others.map(o => o.updated_at),
+    ].filter(Boolean) as string[];
+    
+    const last_updated_at = allUpdatedAts.length > 0
+      ? new Date(Math.max(...allUpdatedAts.map(d => new Date(d).getTime()))).toISOString()
+      : null;
+
     return NextResponse.json({
       success: true,
-      draft: draft || null,
-      published: publishedWithUsers,
+      my,
+      others,
+      authors,
+      last_updated_at,
     });
   } catch (error: any) {
     console.error("[Annotations/List] Error inesperado:", error);

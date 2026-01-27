@@ -402,7 +402,7 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
     height: `${pixels.height}px`,
     pointerEvents: mode === 'annotate' ? 'auto' : 'none',
     cursor: isEditing ? 'text' : (currentTool === 'text' ? 'text' : (canDrag ? 'grab' : 'default')),
-    zIndex: isSelected || isEditing || isHovered ? 10 : 1,
+    zIndex: isSelected || isEditing || isHovered ? 100 : 50, // Aumentar z-index para asegurar visibilidad
     userSelect: 'none',
     touchAction: 'none',
     transition: 'all 0.1s ease-out', // Siempre usar transición, se desactiva durante drag vía style directo
@@ -441,6 +441,7 @@ const DraggableAnnotation = React.memo(function DraggableAnnotation({
   return (
     <div
       ref={elementRef}
+      data-annotation={annotation.id}
       style={containerStyle}
       onPointerDown={handlePointerDown}
       onMouseEnter={() => setIsHovered(true)}

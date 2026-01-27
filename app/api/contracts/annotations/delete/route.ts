@@ -33,11 +33,11 @@ export async function POST(request: NextRequest) {
       .select(`
         id,
         file_version_id,
-        status,
         created_by_user_id,
         contract_file_versions!inner (
           contracts!inner (
-            folder_id
+            folder_id,
+            workspace_id
           )
         )
       `)
@@ -51,19 +51,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar que es DRAFT del usuario actual
-    if (annotation.status !== 'DRAFT' || annotation.created_by_user_id !== user.id) {
+    // Validar que es del usuario actual
+    if (annotation.created_by_user_id !== user.id) {
       return NextResponse.json(
-        { error: "Solo puedes eliminar tus propios borradores" },
+        { error: "Solo puedes eliminar tus propias anotaciones" },
         { status: 403 }
       );
     }
 
-    // Obtener folder_id desde la relación
+    // Obtener folder_id y workspace_id desde la relación
     const folderId = annotation.contract_file_versions?.contracts?.folder_id;
-    if (!folderId) {
+    const workspaceId = annotation.contract_file_versions?.contracts?.workspace_id;
+    
+    if (!folderId || !workspaceId) {
       return NextResponse.json(
-        { error: "No se pudo obtener la carpeta del contrato" },
+        { error: "No se pudo obtener la información del contrato" },
         { status: 500 }
       );
     }
@@ -76,15 +78,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-
-    // Obtener workspace_id antes de eliminar (para actividad)
-    const { data: fileVersion } = await supabase
-      .from('contract_file_versions')
-      .select('contracts!inner(workspace_id)')
-      .eq('id', annotation.file_version_id)
-      .single();
-
-    const workspaceId = fileVersion?.contracts?.workspace_id;
 
     // DELETE
     const { error: deleteError } = await supabaseAdmin
@@ -106,7 +99,7 @@ export async function POST(request: NextRequest) {
         type: 'ANNOTATION_DELETED',
         entity_type: 'contract_file_version',
         entity_id: annotation.file_version_id,
-        description: "Borrador de anotaciones eliminado",
+        description: "Anotaciones eliminadas",
         metadata: {},
         workspace_id: workspaceId,
       });

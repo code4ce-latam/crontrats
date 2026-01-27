@@ -25,14 +25,7 @@ export interface Annotation {
   createdByUserId: string;
 }
 
-export interface AnnotationDraft {
-  id: string;
-  annotations_json: Annotation[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AnnotationPublished {
+export interface AnnotationSet {
   id: string;
   annotations_json: Annotation[];
   created_at: string;
@@ -46,7 +39,35 @@ export interface AnnotationPublished {
 
 export interface AnnotationsListResponse {
   success: boolean;
-  draft: AnnotationDraft | null;
-  published: AnnotationPublished[];
+  my: AnnotationSet | null;
+  others: AnnotationSet[];
+  authors: Array<{
+    user_id: string;
+    display_name: string;
+    avatar_url: string | null;
+  }>;
+  last_updated_at: string | null;
+}
+
+// Mantener tipos antiguos por compatibilidad (deprecated)
+/** @deprecated Usar AnnotationSet en su lugar */
+export interface AnnotationDraft {
+  id: string;
+  annotations_json: Annotation[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** @deprecated Usar AnnotationSet en su lugar */
+export interface AnnotationPublished {
+  id: string;
+  annotations_json: Annotation[];
+  created_at: string;
+  updated_at: string;
+  created_by: {
+    user_id: string;
+    display_name: string;
+    avatar_url: string | null;
+  };
 }
 

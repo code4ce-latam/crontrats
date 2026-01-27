@@ -44,21 +44,19 @@ export function PdfReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-full h-[95vh] m-0 p-0 max-h-[95vh]" hideCloseButton>
+      <DialogContent className="max-w-[95vw] w-full h-[95vh] m-0 p-0 max-h-[95vh] flex flex-col" hideCloseButton>
         <VisuallyHidden>
           <DialogTitle>
             {mode === 'annotate' ? 'Anotar documento' : 'Ver documento'}
           </DialogTitle>
         </VisuallyHidden>
-        <div className="flex flex-col h-full">
-          <PdfReviewer
-            fileVersionId={fileVersionId}
-            storagePath={storagePath}
-            mode={mode}
-            access={access}
-            onClose={() => onOpenChange(false)}
-          />
-        </div>
+        <PdfReviewer
+          fileVersionId={fileVersionId}
+          storagePath={storagePath}
+          mode={mode}
+          access={access}
+          onClose={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

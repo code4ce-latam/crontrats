@@ -17,6 +17,7 @@ interface AnnotationOverlayProps {
   onAnnotationDelete?: (annotation: Annotation) => void;
   mode: 'view' | 'annotate';
   currentTool?: string;
+  currentUserId: string;
 }
 
 export function AnnotationOverlay({
@@ -31,6 +32,7 @@ export function AnnotationOverlay({
   onAnnotationDelete,
   mode,
   currentTool,
+  currentUserId,
 }: AnnotationOverlayProps) {
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
@@ -42,8 +44,17 @@ export function AnnotationOverlay({
 
   const handleAnnotationClick = (annotation: Annotation, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onAnnotationClick && mode === 'annotate') {
+    // Solo permitir selección si es modo annotate y la anotación es propia
+    if (onAnnotationClick && mode === 'annotate' && annotation.createdByUserId === currentUserId) {
       onAnnotationClick(annotation);
+      // Si es un cuadro de texto nuevo (sin texto), activar edición inmediatamente
+      if ((annotation.type === 'TEXT' || annotation.type === 'COMMENT') && !annotation.text) {
+        setEditingAnnotationId(annotation.id);
+        setEditingText('');
+        setTimeout(() => {
+          textInputRef.current?.focus();
+        }, 100);
+      }
     }
   };
 
@@ -95,8 +106,10 @@ export function AnnotationOverlay({
       className="absolute inset-0" 
       style={{ 
         transform: `scale(${scale})`, 
+        transformOrigin: 'top left',
         pointerEvents: 'none',
         touchAction: 'none', // Importante para Pointer Events en móviles
+        zIndex: 20, // Asegurar que esté sobre el PDF y el overlay de eventos
       }}
     >
       {pageAnnotations.map((annotation) => {

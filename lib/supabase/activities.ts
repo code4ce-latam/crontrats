@@ -18,7 +18,8 @@ export type ActivityType =
   | 'CONTRACT_ATTACHMENT_UPLOADED'
   | 'ANNOTATION_DRAFT_SAVED'
   | 'ANNOTATION_PUBLISHED'
-  | 'ANNOTATION_DELETED';
+  | 'ANNOTATION_DELETED'
+  | 'ANNOTATIONS_SAVED';
 
 export type EntityType = 
   | 'contract' 

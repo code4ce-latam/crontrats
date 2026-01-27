@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Tooltip,
   TooltipContent,
@@ -14,26 +15,27 @@ import {
   MessageSquare, 
   Trash2,
   Save,
-  Send,
   X,
   ZoomIn,
   ZoomOut,
+  Bell,
 } from "lucide-react";
 
 export type ToolType = 'select' | 'highlight' | 'text' | 'comment';
 
 interface AnnotationToolbarProps {
   selectedTool: ToolType;
-  onToolChange: (tool: ToolType) => void;
+  onToolChange: (tool: ToolType | 'zoom-in' | 'zoom-out') => void;
   onDelete: () => void;
-  onSaveDraft: () => void;
-  onPublish: () => void;
+  onSave: () => void;
   onClose: () => void;
   hasSelectedAnnotation: boolean;
   isSaving: boolean;
   mode: 'view' | 'annotate';
   currentColor: string;
   onColorChange: (color: string) => void;
+  notifyParticipants: boolean;
+  onNotifyChange: (notify: boolean) => void;
 }
 
 const COLORS = [
@@ -48,14 +50,15 @@ export function AnnotationToolbar({
   selectedTool,
   onToolChange,
   onDelete,
-  onSaveDraft,
-  onPublish,
+  onSave,
   onClose,
   hasSelectedAnnotation,
   isSaving,
   mode,
   currentColor,
   onColorChange,
+  notifyParticipants,
+  onNotifyChange,
 }: AnnotationToolbarProps) {
   if (mode === 'view') {
     return (
@@ -205,40 +208,31 @@ export function AnnotationToolbar({
           )}
         </div>
         
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onSaveDraft}
-                disabled={isSaving}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Guardar borrador
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Guardar cambios sin publicar</p>
-            </TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 border-r pr-3">
+            <Checkbox
+              id="notify-participants"
+              checked={notifyParticipants}
+              onCheckedChange={(checked) => onNotifyChange(checked === true)}
+            />
+            <label
+              htmlFor="notify-participants"
+              className="text-sm font-medium cursor-pointer flex items-center gap-1"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              Notificar a participantes
+            </label>
+          </div>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onPublish}
-                disabled={isSaving}
-              >
-                <Send className="h-4 w-4 mr-2" />
-                Publicar
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Publicar anotaciones para que otros las vean</p>
-            </TooltipContent>
-          </Tooltip>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={onSave}
+            disabled={isSaving}
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {isSaving ? "Guardando..." : "Guardar"}
+          </Button>
 
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="h-4 w-4 mr-2" />
