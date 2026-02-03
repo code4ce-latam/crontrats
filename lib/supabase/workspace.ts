@@ -4,7 +4,7 @@ import { createActivity } from "./activities";
 /**
  * Crea automáticamente un workspace y membresía OWNER para un usuario
  * si no tiene registros previos en workspace_members (sin invitación).
- * 
+ * ññ
  * Usa una función SQL atómica para evitar condiciones de carrera y duplicados.
  * 
  * @param supabase Cliente de Supabase

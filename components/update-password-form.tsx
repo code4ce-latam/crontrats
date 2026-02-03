@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Lock, Eye, EyeOff, ArrowRight, FileText, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff, ArrowRight, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import Link from "next/link";
 
 export function UpdatePasswordForm({
   className,
@@ -21,8 +22,21 @@ export function UpdatePasswordForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  // Verificar inmediatamente si hay parámetros de recuperación en la URL
+  const hasRecoveryParamsInitial = typeof window !== 'undefined' && (
+    window.location.hash.includes('access_token') ||
+    window.location.hash.includes('refresh_token') ||
+    window.location.hash.includes('token_hash') ||
+    window.location.search.includes('access_token') ||
+    window.location.search.includes('refresh_token') ||
+    window.location.search.includes('token_hash')
+  );
+
+  const [isCheckingSession, setIsCheckingSession] = useState(hasRecoveryParamsInitial);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ email: string; name: string | null } | null>(null);
+  const [showInvalidSessionError, setShowInvalidSessionError] = useState(!hasRecoveryParamsInitial);
+  const [hasCheckedSession, setHasCheckedSession] = useState(false);
   const router = useRouter();
 
   // Verificar si hay una sesión activa al cargar el componente
@@ -30,6 +44,73 @@ export function UpdatePasswordForm({
   useEffect(() => {
     const checkSession = async () => {
       const supabase = createClient();
+      
+      // Verificar si hay parámetros de recuperación en la URL (hash o query params)
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      const accessToken = hashParams.get('access_token') || urlParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token') || urlParams.get('refresh_token');
+      const type = hashParams.get('type') || urlParams.get('type');
+      const tokenHash = hashParams.get('token_hash') || urlParams.get('token_hash');
+      
+      // Si no hay ningún parámetro de recuperación en la URL, el enlace es inválido
+      if (!accessToken && !refreshToken && !tokenHash && !type) {
+        setShowInvalidSessionError(true);
+        setIsCheckingSession(false);
+        setHasCheckedSession(true);
+        return;
+      }
+      
+      // Si hay un token_hash y type, intentar verificar el OTP
+      if (tokenHash && type) {
+        try {
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            type: type as any,
+            token_hash: tokenHash,
+          });
+          
+          if (verifyError) {
+            console.error("[UpdatePasswordForm] Error verificando OTP:", verifyError);
+            setShowInvalidSessionError(true);
+            setIsCheckingSession(false);
+            setHasCheckedSession(true);
+            return;
+          }
+        } catch (err) {
+          console.error("[UpdatePasswordForm] Error procesando token:", err);
+          setShowInvalidSessionError(true);
+          setIsCheckingSession(false);
+          setHasCheckedSession(true);
+          return;
+        }
+      }
+      
+      // Si hay access_token y refresh_token en el hash, establecer la sesión
+      if (accessToken && refreshToken) {
+        try {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (sessionError) {
+            console.error("[UpdatePasswordForm] Error estableciendo sesión:", sessionError);
+            setShowInvalidSessionError(true);
+            setIsCheckingSession(false);
+            setHasCheckedSession(true);
+            return;
+          }
+        } catch (err) {
+          console.error("[UpdatePasswordForm] Error estableciendo sesión:", err);
+          setShowInvalidSessionError(true);
+          setIsCheckingSession(false);
+          setHasCheckedSession(true);
+          return;
+        }
+      }
+      
+      // Verificar si hay una sesión activa
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -37,12 +118,35 @@ export function UpdatePasswordForm({
         setTimeout(async () => {
           const { data: { user: retryUser } } = await supabase.auth.getUser();
           if (!retryUser) {
-            setError("No hay una sesión activa. Por favor, usa el enlace del email de recuperación o solicita uno nuevo.");
+            setShowInvalidSessionError(true);
+          } else {
+            // Obtener información del usuario
+            const userName = 
+              retryUser.user_metadata?.full_name ||
+              retryUser.user_metadata?.name ||
+              `${retryUser.user_metadata?.first_name || ''} ${retryUser.user_metadata?.last_name || ''}`.trim() ||
+              null;
+            setUserInfo({
+              email: retryUser.email || '',
+              name: userName,
+            });
           }
           setIsCheckingSession(false);
-        }, 1000);
+          setHasCheckedSession(true);
+        }, 1500);
       } else {
+        // Obtener información del usuario
+        const userName = 
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          `${user.user_metadata?.first_name || ''} ${user.user_metadata?.last_name || ''}`.trim() ||
+          null;
+        setUserInfo({
+          email: user.email || '',
+          name: userName,
+        });
         setIsCheckingSession(false);
+        setHasCheckedSession(true);
       }
     };
 
@@ -87,6 +191,35 @@ export function UpdatePasswordForm({
     }
   };
 
+  // Si hay error de sesión inválida, mostrar solo el mensaje de error
+  if (showInvalidSessionError) {
+    return (
+      <div className={cn("w-full max-w-md", className)} {...props}>
+        <div className="bg-white rounded-2xl shadow-xl p-5 md:p-6 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-10 h-10 text-red-600" />
+            </div>
+          </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">
+            Enlace Inválido
+          </h1>
+          
+          <p className="text-sm text-gray-600 mb-4">
+            Este enlace de recuperación no es válido o ha expirado. Por favor, usa el enlace del email de recuperación o solicita uno nuevo.
+          </p>
+          
+          <Button asChild className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
+            <Link href="/auth/login">
+              Ir al Inicio de Sesión
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("w-full max-w-md", className)} {...props}>
       <div className="bg-white rounded-2xl shadow-xl p-8">
@@ -106,13 +239,28 @@ export function UpdatePasswordForm({
           <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
             Nueva Contraseña
           </h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 mb-4">
             Ingresa tu nueva contraseña a continuación
           </p>
+          {userInfo && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Usuario:</span>{" "}
+                {userInfo.name ? (
+                  <>
+                    <span className="font-semibold text-blue-900">{userInfo.name}</span>
+                    <span className="text-gray-500"> ({userInfo.email})</span>
+                  </>
+                ) : (
+                  <span className="font-semibold text-blue-900">{userInfo.email}</span>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Mensaje de verificación de sesión */}
-        {isCheckingSession && (
+        {isCheckingSession && !showInvalidSessionError && !hasCheckedSession && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               Verificando sesión...

@@ -1,4 +1,4 @@
-import { UpdatePasswordForm } from "@/components/update-password-form";
+import { ChangePasswordRequiredForm } from "@/components/change-password-required-form";
 
 export default function Page() {
   return (
@@ -14,14 +14,14 @@ export default function Page() {
           </div>
           <div className="relative z-10 flex flex-col justify-center pl-16 pr-8 text-gray-800">
             <h1 className="text-5xl font-bold mb-6 text-blue-900 animate-fadeIn">
-              Actualiza tu Seguridad
+              Cambio de Contraseña Requerido
             </h1>
             <div className="relative w-fit">
               <p className="text-xl text-gray-600 leading-relaxed overflow-hidden border-r-4 border-blue-500 whitespace-nowrap animate-typing">
-                Protege tu cuenta con una
+                Por seguridad, debes cambiar
               </p>
               <p className="text-xl text-gray-600 leading-relaxed mt-2 animate-fadeIn opacity-0" style={{ animationDelay: "3.5s" }}>
-                contraseña segura y fácil de recordar.
+                tu contraseña temporal ahora.
               </p>
             </div>
           </div>
@@ -29,9 +29,10 @@ export default function Page() {
 
         {/* Sección derecha - Formulario */}
         <div className="w-full lg:w-1/2 flex items-center justify-center pl-8 pr-6 md:pr-10 py-6 md:py-10 bg-white relative">
-          <UpdatePasswordForm />
+          <ChangePasswordRequiredForm />
         </div>
       </div>
     </div>
   );
 }
+

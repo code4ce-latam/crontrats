@@ -48,14 +48,22 @@ export function LoginForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const router = useRouter();
 
-  // Verificar si hay un mensaje de éxito en la URL
+  // Verificar si hay un mensaje de éxito y email en la URL
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const message = params.get("message");
+      const emailParam = params.get("email");
+      
       if (message === "password_updated") {
         setSuccessMessage("Tu contraseña ha sido actualizada exitosamente. Por favor, inicia sesión con tu nueva contraseña.");
-        // Limpiar la URL
+        // Establecer el email si viene en la URL
+        if (emailParam) {
+          setEmail(decodeURIComponent(emailParam));
+        }
+        // Limpiar solo la contraseña
+        setPassword("");
+        // Limpiar la URL pero mantener el estado
         window.history.replaceState({}, '', window.location.pathname);
       } else if (message) {
         // Mostrar cualquier otro mensaje (como el de cuenta creada)
@@ -113,6 +121,13 @@ export function LoginForm({
           await supabase.auth.refreshSession();
         }
 
+        // Verificar si el usuario tiene contraseña temporal y requiere cambio
+        if (user?.user_metadata?.requires_password_change) {
+          // Redirigir a la página de cambio de contraseña obligatorio
+          router.push("/auth/change-password-required");
+          return;
+        }
+
         // Registrar actividad de login
         if (user) {
           await createActivity(supabase, {
@@ -126,6 +141,12 @@ export function LoginForm({
         // Continuar aunque falle el cleanup
         console.error("Error en cleanup de avatar después del login:", cleanupError);
       }
+
+      // Limpiar campos antes de redirigir
+      setEmail("");
+      setPassword("");
+      setError(null);
+      setSuccessMessage(null);
 
       router.push("/protected");
     } catch (error: unknown) {

@@ -55,6 +55,12 @@ export async function GET(request: NextRequest) {
             await supabase.auth.refreshSession();
           }
 
+          // Verificar si el usuario tiene contraseña temporal y requiere cambio
+          if (user?.user_metadata?.requires_password_change) {
+            // Redirigir a la página de cambio de contraseña obligatorio
+            return NextResponse.redirect(new URL("/auth/change-password-required", requestUrl.origin));
+          }
+
           // Registrar actividad de login (OAuth)
           try {
             await createActivity(supabase, {

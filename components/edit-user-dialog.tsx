@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { createClient } from "@/lib/supabase/client";
-import { User, Mail } from "lucide-react";
+import { User, Mail, Key } from "lucide-react";
 import { type WorkspaceUser, type UserRole } from "@/lib/supabase/users";
 
 interface EditUserDialogProps {
@@ -35,6 +35,14 @@ export function EditUserDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
+  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState(false);
+  const [showTemporaryPasswordDialog, setShowTemporaryPasswordDialog] = useState(false);
+  const [temporaryPasswordLoading, setTemporaryPasswordLoading] = useState(false);
+  const [temporaryPasswordError, setTemporaryPasswordError] = useState<string | null>(null);
+  const [temporaryPasswordSuccess, setTemporaryPasswordSuccess] = useState(false);
 
   // Actualizar estado cuando cambia el usuario
   useEffect(() => {
@@ -130,17 +138,91 @@ export function EditUserDialog({
     }
   };
 
+  const handleResetPassword = async () => {
+    setResetPasswordLoading(true);
+    setResetPasswordError(null);
+    setResetPasswordSuccess(false);
+
+    try {
+      const response = await fetch("/api/users/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.user_id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al enviar el enlace de restablecimiento");
+      }
+
+      setResetPasswordSuccess(true);
+      
+      // Cerrar el diálogo de confirmación después de 2 segundos
+      setTimeout(() => {
+        setShowResetPasswordDialog(false);
+        setResetPasswordSuccess(false);
+      }, 2000);
+    } catch (err: any) {
+      setResetPasswordError(err.message || "Error al enviar el enlace de restablecimiento");
+    } finally {
+      setResetPasswordLoading(false);
+    }
+  };
+
+  const handleSendTemporaryPassword = async () => {
+    setTemporaryPasswordLoading(true);
+    setTemporaryPasswordError(null);
+    setTemporaryPasswordSuccess(false);
+
+    try {
+      const response = await fetch("/api/users/send-temporary-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: user.email,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al enviar la contraseña temporal");
+      }
+
+      setTemporaryPasswordSuccess(true);
+      
+      // Cerrar el diálogo de confirmación después de 2 segundos
+      setTimeout(() => {
+        setShowTemporaryPasswordDialog(false);
+        setTemporaryPasswordSuccess(false);
+      }, 2000);
+    } catch (err: any) {
+      setTemporaryPasswordError(err.message || "Error al enviar la contraseña temporal");
+    } finally {
+      setTemporaryPasswordLoading(false);
+    }
+  };
+
   const canEditRole = currentUserRole === 'OWNER';
+  const canResetPassword = currentUserRole === 'OWNER' || currentUserRole === 'EDITOR';
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Editar Usuario</DialogTitle>
-          <DialogDescription>
-            Actualiza la información del usuario
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Usuario</DialogTitle>
+            <DialogDescription>
+              Actualiza la información del usuario
+            </DialogDescription>
+          </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email (solo lectura) */}
@@ -223,6 +305,38 @@ export function EditUserDialog({
             </div>
           )}
 
+          {/* Botones de contraseña */}
+          {canResetPassword && (
+            <div className="space-y-3 pt-2 border-t">
+              <Label>Contraseña</Label>
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowResetPasswordDialog(true)}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Enviar enlace para restablecer contraseña
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowTemporaryPasswordDialog(true)}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Enviar contraseña temporal
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se enviará un enlace al email del usuario para que pueda establecer una nueva contraseña, o una contraseña temporal que deberá cambiar en el primer inicio de sesión
+              </p>
+            </div>
+          )}
+
           {/* Mensaje de error */}
           {error && (
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
@@ -246,6 +360,129 @@ export function EditUserDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Diálogo de confirmación para resetear contraseña */}
+    <Dialog open={showResetPasswordDialog} onOpenChange={setShowResetPasswordDialog}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Restablecer Contraseña</DialogTitle>
+          <DialogDescription>
+            Se enviará un enlace al email del usuario para que pueda establecer una nueva contraseña
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="p-4 bg-muted rounded-md">
+            <p className="text-sm font-medium mb-1">Usuario:</p>
+            <p className="text-sm text-muted-foreground">{user.email || user.display_name || 'Usuario'}</p>
+          </div>
+
+          {resetPasswordSuccess && (
+            <div className="p-3 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-sm">
+              ✓ Enlace de restablecimiento enviado exitosamente al email del usuario
+            </div>
+          )}
+
+          {resetPasswordError && (
+            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {resetPasswordError}
+            </div>
+          )}
+
+          {!resetPasswordSuccess && (
+            <p className="text-sm text-muted-foreground">
+              El usuario recibirá un email con un enlace para restablecer su contraseña. El enlace expirará en 24 horas.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowResetPasswordDialog(false);
+              setResetPasswordError(null);
+              setResetPasswordSuccess(false);
+            }}
+            disabled={resetPasswordLoading}
+          >
+            {resetPasswordSuccess ? "Cerrar" : "Cancelar"}
+          </Button>
+          {!resetPasswordSuccess && (
+            <Button
+              type="button"
+              onClick={handleResetPassword}
+              disabled={resetPasswordLoading}
+            >
+              {resetPasswordLoading ? "Enviando..." : "Enviar Enlace"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Diálogo de confirmación para enviar contraseña temporal */}
+    <Dialog open={showTemporaryPasswordDialog} onOpenChange={setShowTemporaryPasswordDialog}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Enviar Contraseña Temporal</DialogTitle>
+          <DialogDescription>
+            Se enviará una contraseña temporal al email del usuario. El usuario deberá cambiarla en el primer inicio de sesión.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="p-4 bg-muted rounded-md">
+            <p className="text-sm font-medium mb-1">Usuario:</p>
+            <p className="text-sm text-muted-foreground">{user.email || user.display_name || 'Usuario'}</p>
+          </div>
+
+          {temporaryPasswordSuccess && (
+            <div className="p-3 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-sm">
+              ✓ Contraseña temporal enviada exitosamente al email del usuario
+            </div>
+          )}
+
+          {temporaryPasswordError && (
+            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {temporaryPasswordError}
+            </div>
+          )}
+
+          {!temporaryPasswordSuccess && (
+            <p className="text-sm text-muted-foreground">
+              El usuario recibirá un email con una contraseña temporal. Deberá iniciar sesión con esta contraseña y cambiarla inmediatamente por seguridad.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowTemporaryPasswordDialog(false);
+              setTemporaryPasswordError(null);
+              setTemporaryPasswordSuccess(false);
+            }}
+            disabled={temporaryPasswordLoading}
+          >
+            {temporaryPasswordSuccess ? "Cerrar" : "Cancelar"}
+          </Button>
+          {!temporaryPasswordSuccess && (
+            <Button
+              type="button"
+              onClick={handleSendTemporaryPassword}
+              disabled={temporaryPasswordLoading}
+            >
+              {temporaryPasswordLoading ? "Enviando..." : "Enviar Contraseña Temporal"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

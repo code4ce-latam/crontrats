@@ -6,6 +6,7 @@ import { SidebarProvider } from "@/components/sidebar-context";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { AvatarCleanup } from "@/components/avatar-cleanup";
 import { WorkspaceEnsure } from "@/components/workspace-ensure";
+import { PasswordChangeRequiredCheck } from "@/components/password-change-required-check";
 import { ActivitiesProvider } from "@/components/activities-context";
 import { ActivitiesPanel } from "@/components/activities-panel";
 import { ActivitiesToggle } from "@/components/activities-toggle";
@@ -26,6 +27,7 @@ export default function ProtectedLayout({
         <BreadcrumbsProvider>
           <AvatarCleanup />
           <WorkspaceEnsure />
+          <PasswordChangeRequiredCheck />
         <div className="min-h-screen flex overflow-x-hidden">
           <Suspense
             fallback={
