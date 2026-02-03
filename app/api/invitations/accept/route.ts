@@ -33,20 +33,40 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar si el usuario ya existe
-    // En Supabase v2, getUserByEmail no existe, usamos listUsers con filtro
+    // En Supabase v2, getUserByEmail no existe, usamos listUsers y filtramos manualmente
     let existingUser;
     try {
-      const { data: usersData, error: listUsersError } = await supabase.auth.admin.listUsers({
-        filter: {
-          email: invite.email,
-        },
+      console.log("[AcceptInvite] Verificando si el usuario ya existe con email:", invite.email);
+      const { data: usersData, error: listUsersError } = await supabase.auth.admin.listUsers();
+      
+      console.log("[AcceptInvite] Resultado de listUsers:", {
+        hasError: !!listUsersError,
+        error: listUsersError,
+        usersCount: usersData?.users?.length || 0,
+        allUsers: usersData?.users?.map(u => ({ id: u.id, email: u.email })),
       });
-      if (!listUsersError && usersData?.users && usersData.users.length > 0) {
-        existingUser = usersData.users[0];
+      
+      if (!listUsersError && usersData?.users) {
+        // Filtrar manualmente por email (el filtro de listUsers puede no funcionar correctamente)
+        existingUser = usersData.users.find(user => 
+          user.email?.toLowerCase() === invite.email.toLowerCase()
+        );
+        
+        if (existingUser) {
+          console.log("[AcceptInvite] Usuario existente encontrado:", {
+            id: existingUser.id,
+            email: existingUser.email,
+          });
+        } else {
+          console.log("[AcceptInvite] Usuario no existe, se creará uno nuevo");
+        }
+      } else {
+        console.log("[AcceptInvite] Error al listar usuarios o no hay usuarios, se creará uno nuevo");
       }
     } catch (error) {
       // Si el usuario no existe, continuamos con la creación del usuario
-      console.log("[AcceptInvite] Usuario no existe, se creará uno nuevo");
+      console.error("[AcceptInvite] Error verificando usuario existente:", error);
+      console.log("[AcceptInvite] Continuando con creación de nuevo usuario");
     }
 
     if (existingUser) {
@@ -107,6 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear el nuevo usuario usando Admin API
+    console.log("[AcceptInvite] Intentando crear usuario con email:", invite.email);
     const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
       email: invite.email,
       password: password,
@@ -118,15 +139,56 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (signUpError || !newUser?.user) {
-      console.error("[AcceptInvite] Error creando usuario:", signUpError);
+    console.log("[AcceptInvite] Respuesta de createUser:", {
+      hasData: !!newUser,
+      hasUser: !!newUser?.user,
+      userId: newUser?.user?.id,
+      email: newUser?.user?.email,
+      error: signUpError,
+      errorMessage: signUpError?.message,
+      errorStatus: signUpError?.status,
+    });
+
+    if (signUpError) {
+      console.error("[AcceptInvite] Error creando usuario:", {
+        message: signUpError.message,
+        status: signUpError.status,
+        name: signUpError.name,
+        error: signUpError,
+      });
       return NextResponse.json(
-        { error: signUpError?.message || "Error al crear el usuario" },
+        { 
+          error: signUpError.message || "Error al crear el usuario",
+          details: signUpError.status ? `Status: ${signUpError.status}` : undefined,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!newUser?.user) {
+      console.error("[AcceptInvite] createUser no retornó usuario:", { newUser });
+      return NextResponse.json(
+        { error: "Error al crear el usuario: No se recibió respuesta del servidor" },
         { status: 500 }
       );
     }
 
     const userId = newUser.user.id;
+    console.log("[AcceptInvite] Usuario creado exitosamente con ID:", userId);
+
+    // ACTUALIZACIÓN: Forzar actualización de contraseña para asegurar que funcione con signInWithPassword
+    // Esto es necesario porque algunas versiones de Supabase requieren actualizar la contraseña
+    // explícitamente después de crearla con Admin API para que funcione correctamente con signInWithPassword
+    const { error: updatePasswordError } = await supabase.auth.admin.updateUserById(
+      userId,
+      { password: password }
+    );
+
+    if (updatePasswordError) {
+      console.error("[AcceptInvite] Error actualizando contraseña:", updatePasswordError);
+      // No fallar aquí, pero registrar el error para debugging
+      // El usuario ya fue creado, así que continuamos con el flujo
+    }
 
     // Agregar al workspace
     const { error: membershipError } = await supabase

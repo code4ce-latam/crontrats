@@ -55,13 +55,27 @@ export function AcceptInviteForm({ token, inviteEmail, inviteDisplayName }: Acce
 
       const data = await response.json();
 
+      console.log("[AcceptInviteForm] Respuesta del servidor:", {
+        ok: response.ok,
+        status: response.status,
+        data,
+      });
+
       if (!response.ok) {
+        const errorMessage = data.error || data.details || "Error al crear la cuenta";
+        console.error("[AcceptInviteForm] Error del servidor:", errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      if (!data.success) {
+        console.error("[AcceptInviteForm] Respuesta sin success:", data);
         throw new Error(data.error || "Error al crear la cuenta");
       }
 
       // Redirigir al login con mensaje de éxito
       router.push("/auth/login?message=Cuenta creada exitosamente. Ya puedes iniciar sesión.");
     } catch (err: any) {
+      console.error("[AcceptInviteForm] Error capturado:", err);
       setError(err.message || "Error al crear la cuenta");
     } finally {
       setIsLoading(false);

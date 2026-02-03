@@ -2,12 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { validateInviteToken } from "@/lib/supabase/invitations";
 import { redirect } from "next/navigation";
 import { AcceptInviteForm } from "@/components/accept-invite-form";
+import { Suspense } from "react";
 
 interface PageProps {
   params: Promise<{ token: string }>;
 }
 
-export default async function AcceptInvitePage({ params }: PageProps) {
+async function AcceptInviteContent({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supabase = await createClient();
 
@@ -50,6 +51,20 @@ export default async function AcceptInvitePage({ params }: PageProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage({ params }: PageProps) {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    }>
+      <AcceptInviteContent params={params} />
+    </Suspense>
   );
 }
 

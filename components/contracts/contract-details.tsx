@@ -15,14 +15,11 @@ import {
   Folder,
   Calendar,
   Tag,
-  Eye,
-  PenTool,
 } from "lucide-react";
 import { getStatusLabel, getStatusBadgeVariant, formatContractValue } from "@/lib/contracts-utils";
 import { ContractProfileFields } from "./contract-profile-fields";
 import { UploadVersionDialog } from "./upload-version-dialog";
 import { UploadAttachmentDialog } from "./upload-attachment-dialog";
-import { PdfReviewModal } from "../pdf-review/pdf-review-modal";
 import { getFolderAccess } from "@/lib/supabase/folders";
 import { createClient } from "@/lib/supabase/client";
 
@@ -38,9 +35,6 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
   const [isUploadVersionOpen, setIsUploadVersionOpen] = useState(false);
   const [isUploadAttachmentOpen, setIsUploadAttachmentOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [pdfReviewOpen, setPdfReviewOpen] = useState(false);
-  const [pdfReviewMode, setPdfReviewMode] = useState<'view' | 'annotate'>('view');
-  const [selectedFileVersion, setSelectedFileVersion] = useState<{ id: string; storage_path: string } | null>(null);
 
   useEffect(() => {
     loadAccess();
@@ -107,11 +101,6 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
     }
   };
 
-  const handleOpenViewer = (version: any, mode: 'view' | 'annotate') => {
-    setSelectedFileVersion({ id: version.id, storage_path: version.storage_path });
-    setPdfReviewMode(mode);
-    setPdfReviewOpen(true);
-  };
 
   const canEdit = access === 'EDIT' || access === 'OWNER';
   const canView = access === 'READ' || access === 'EDIT' || access === 'OWNER';
@@ -349,26 +338,6 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleOpenViewer(version, 'view')}
-                        className="h-8 px-2"
-                        title="Abrir documento"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {(access === 'EDIT' || access === 'OWNER') && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenViewer(version, 'annotate')}
-                          className="h-8 px-2"
-                          title="Anotar documento"
-                        >
-                          <PenTool className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
                         onClick={() => handleDownloadVersion(version)}
                         className="h-8 px-2"
                         title="Descargar"
@@ -500,16 +469,6 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
           router.refresh();
         }}
       />
-      {selectedFileVersion && (
-        <PdfReviewModal
-          open={pdfReviewOpen}
-          onOpenChange={setPdfReviewOpen}
-          fileVersionId={selectedFileVersion.id}
-          storagePath={selectedFileVersion.storage_path}
-          mode={pdfReviewMode}
-          access={access || 'READ'}
-        />
-      )}
     </div>
   );
 }
