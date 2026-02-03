@@ -12,7 +12,7 @@ import { UploadVersionDialog } from "./upload-version-dialog";
 import { UploadAttachmentDialog } from "./upload-attachment-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { getFolderAccess } from "@/lib/supabase/folders";
-import { FileText, Download, Upload, Trash2 } from "lucide-react";
+import { FileText, Download, Upload, Trash2, MessageSquare } from "lucide-react";
 
 interface EditContractFormProps {
   contractId: string;
@@ -319,6 +319,37 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleFinishEditing = async () => {
+    setIsSubmitting(true);
+    setErrors({});
+
+    try {
+      // Cambiar el estado del contrato a ACTIVE
+      const response = await fetch("/api/contracts/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contract_id: contractId,
+          status: "ACTIVE",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Error al finalizar la edición");
+      }
+
+      // Redirigir a la página de detalles
+      router.push(`/protected/contratos/${contractId}`);
+    } catch (error: any) {
+      console.error("[EditContractForm] Error finalizando edición:", error);
+      setErrors({ submit: error.message || "Error al finalizar la edición" });
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -651,6 +682,18 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {(access === "EDIT" || access === "OWNER") && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push(`/protected/contratos/${contractId}/anotar/${version.id}`)}
+                          className="h-8 px-2"
+                          title="Anotar"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -772,9 +815,10 @@ export function EditContractForm({ contractId, workspaceId, initialContract }: E
         <Button
           type="button"
           variant="default"
-          onClick={() => router.push(`/protected/contratos/${contractId}`)}
+          onClick={handleFinishEditing}
+          disabled={isSubmitting}
         >
-          Finalizar edición
+          {isSubmitting ? "Finalizando..." : "Finalizar edición"}
         </Button>
       </div>
         </>

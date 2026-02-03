@@ -98,6 +98,7 @@ export function getRouteLabel(pathname: string, dynamicData?: Record<string, str
   const segmentLabels: Record<string, string> = {
     'editar': 'Editar',
     'nuevo': 'Nuevo',
+    'anotar': 'Anotar',
     'usuarios': 'Usuarios',
     'perfiles': 'Perfiles',
     'recordatorios': 'Recordatorios',
@@ -164,6 +165,18 @@ export function generateBreadcrumbs(
           href: `${contractPath}/editar`,
         });
         i++; // Saltar el segmento "editar"
+      }
+      // Si hay un segmento "anotar" después, agregarlo
+      else if (i + 1 < segments.length && segments[i + 1] === 'anotar') {
+        // Saltar el segmento "anotar" y el versionId
+        if (i + 2 < segments.length) {
+          const versionId = segments[i + 2];
+          breadcrumbs.push({
+            label: 'Anotar',
+            href: `${contractPath}/anotar/${versionId}`,
+          });
+          i += 2; // Saltar "anotar" y el versionId
+        }
       }
       continue;
     }

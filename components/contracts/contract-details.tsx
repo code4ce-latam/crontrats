@@ -102,8 +102,11 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
   };
 
 
-  const canEdit = access === 'EDIT' || access === 'OWNER';
-  const canView = access === 'READ' || access === 'EDIT' || access === 'OWNER';
+    const canEdit = access === 'EDIT' || access === 'OWNER';
+    const canView = access === 'READ' || access === 'EDIT' || access === 'OWNER';
+    
+    // Bloquear subida de archivos si el contrato no está en estado DRAFT
+    const canUploadFiles = canEdit && contract.status === 'DRAFT';
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -220,17 +223,6 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                 <p className="text-sm text-muted-foreground">
                   Heredado de carpeta: <strong className="text-foreground">{contract.folder?.name || 'N/A'}</strong>
                 </p>
-                {access === 'OWNER' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => router.push(`/protected/carpetas?folder=${contract.folder_id}`)}
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Administrar permisos
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -302,6 +294,8 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                   variant="outline"
                   size="sm"
                   onClick={() => setIsUploadVersionOpen(true)}
+                  disabled={!canUploadFiles}
+                  title={!canUploadFiles ? "Solo se pueden subir archivos mientras el contrato esté en borrador" : ""}
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Subir nueva versión
@@ -383,6 +377,8 @@ export function ContractDetails({ contract, workspaceId }: ContractDetailsProps)
                   variant="outline"
                   size="sm"
                   onClick={() => setIsUploadAttachmentOpen(true)}
+                  disabled={!canUploadFiles}
+                  title={!canUploadFiles ? "Solo se pueden subir archivos mientras el contrato esté en borrador" : ""}
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Subir archivo
